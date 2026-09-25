@@ -35,6 +35,10 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
 
+      # `husky exec` locates its folder through core.hooksPath, which HUSKY=0 leaves unset.
+      - name: Configure Husky
+        run: dotnet husky install
+
       # Same script as the local commit-msg hook, so commits made on github.com or with
       # --no-verify are held to the same rules.
       - name: Lint commit messages
