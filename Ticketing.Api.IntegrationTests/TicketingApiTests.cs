@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Contracts;
+using Ticketing.Application.Common.Models;
 using Ticketing.Application.Common.Security;
 using Ticketing.Application.Events;
 using Ticketing.Application.Reservations;
@@ -217,6 +218,61 @@ public sealed class TicketingApiTests(TicketingApiFactory factory)
         (
             await otherCustomer.PostAsync($"/api/reservations/{reservation.Id}/confirm", null, Ct)
         ).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task My_events_lists_only_the_callers_events_including_drafts()
+    {
+        // A fresh organizer so earlier tests' events don't affect the counts.
+        var organizer = factory.CreateClientAs(Guid.NewGuid().ToString(), Roles.Organizer);
+        var draft = await organizer.CreateDraftEventAsync(Now, 10);
+        var published = await organizer.CreatePublishedEventAsync(Now, 10);
+        await _organizer.CreatePublishedEventAsync(Now, 10);
+
+        var mine = await (await organizer.GetAsync("/api/me/events", Ct)).ReadAsync<
+            PagedResult<EventDto>
+        >();
+
+        mine.TotalCount.ShouldBe(2);
+        mine.Items.Select(e => e.Id).ShouldBe([draft.Id, published.Id], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task My_reservations_lists_only_the_callers_reservations()
+    {
+        var customer = factory.CreateClientAs(Guid.NewGuid().ToString(), Roles.Customer);
+        var @event = await _organizer.CreatePublishedEventAsync(Now, 10);
+        foreach (var client in new[] { customer, customer, _customer })
+        {
+            (
+                await client.PostAsJsonAsync(
+                    $"/api/events/{@event.Id}/reservations",
+                    new ReserveTicketsRequest("fan@example.com", 1),
+                    Ct
+                )
+            ).StatusCode.ShouldBe(HttpStatusCode.Created);
+        }
+
+        var mine = await (
+            await customer.GetAsync("/api/me/reservations?status=Pending", Ct)
+        ).ReadAsync<PagedResult<ReservationDto>>();
+
+        mine.TotalCount.ShouldBe(2);
+        mine.Items.ShouldAllBe(r => r.EventId == @event.Id && r.EventName == "Jazz Night");
+    }
+
+    [Fact]
+    public async Task My_lists_are_gated_by_role()
+    {
+        (await _anonymous.GetAsync("/api/me/events", Ct)).StatusCode.ShouldBe(
+            HttpStatusCode.Unauthorized
+        );
+        (await _customer.GetAsync("/api/me/events", Ct)).StatusCode.ShouldBe(
+            HttpStatusCode.Forbidden
+        );
+        (await _organizer.GetAsync("/api/me/reservations", Ct)).StatusCode.ShouldBe(
+            HttpStatusCode.Forbidden
+        );
     }
 
     [Fact]

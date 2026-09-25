@@ -14,16 +14,13 @@ public sealed record ListEventsQuery(
     int PageSize = 20,
     string? Search = null,
     EventStatus? Status = null
-) : IQuery<PagedResult<EventDto>>;
+) : IQuery<PagedResult<EventDto>>, IPagedQuery;
 
 internal sealed class ListEventsQueryValidator : AbstractValidator<ListEventsQuery>
 {
-    public const int MaxPageSize = 100;
-
     public ListEventsQueryValidator()
     {
-        RuleFor(q => q.Page).GreaterThanOrEqualTo(1);
-        RuleFor(q => q.PageSize).InclusiveBetween(1, MaxPageSize);
+        Include(new PagedQueryValidator());
         RuleFor(q => q.Search).MaximumLength(200);
         RuleFor(q => q.Status).IsInEnum();
     }
@@ -32,7 +29,7 @@ internal sealed class ListEventsQueryValidator : AbstractValidator<ListEventsQue
 internal sealed class ListEventsQueryHandler(IApplicationDbContext db, ICurrentUser user)
     : IQueryHandler<ListEventsQuery, PagedResult<EventDto>>
 {
-    public async Task<PagedResult<EventDto>> HandleAsync(
+    public Task<PagedResult<EventDto>> HandleAsync(
         ListEventsQuery query,
         CancellationToken cancellationToken
     )
@@ -50,15 +47,9 @@ internal sealed class ListEventsQueryHandler(IApplicationDbContext db, ICurrentU
             events = events.Where(e => e.Name.Contains(term) || e.Venue.Contains(term));
         }
 
-        var totalCount = await events.CountAsync(cancellationToken);
-        var items = await events
+        return events
             .OrderBy(e => e.StartsAt)
             .ThenBy(e => e.Id)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .Select(EventDto.Projection)
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<EventDto>(items, query.Page, query.PageSize, totalCount);
+            .ToPagedResultAsync(EventDto.Projection, query, cancellationToken);
     }
 }

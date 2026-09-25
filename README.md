@@ -44,7 +44,8 @@ Controller ──► IDispatcher.SendAsync(command) ──► validators ──�
            └─► IDispatcher.QueryAsync(query)  ──► validators ──► IQueryHandler   ──► AsNoTracking + SQL projection
 ```
 
-- Commands change state through domain methods. Queries never load entities; they project straight to DTOs. `GetReservationById`, for example, joins in event details as its own read model.
+- Commands change state through domain methods. Queries never load entities; they project straight to DTOs. Reservations are read through one joined read model (`ReservationWithEvent`), which both `GetReservationById` and `ListMyReservations` filter and sort before projecting in SQL.
+- The `/api/me/...` endpoints take the user from the access token, never the URL, so there's no user ID to tamper with. All list queries share one set of paging rules (`IPagedQuery`) and one helper that requires an ordered query before paging.
 - The dispatcher runs every `IValidator<T>` before the handler. Handlers and validators are found by assembly scanning, so a new feature needs no DI wiring.
 - Errors are mapped to problem details: validation → **400**, not signed in → **401**, not allowed → **403**, not found → **404**, and business-rule or concurrency conflicts → **409**.
 
@@ -102,6 +103,8 @@ az account get-access-token --scope "api://<API_CLIENT_ID>/access_as_user" --que
 | POST   | `/api/events/{id}/cancel`          | Organizer (owner)       | Cancel the event and its reservations → 204     |
 | POST   | `/api/events/{id}/reservations`    | Customer                | Hold seats → 201 + `Location`                   |
 | GET    | `/api/reservations/{id}`           | Its customer or organizer | Reservation with event details                |
+| GET    | `/api/me/events`                   | Organizer               | The caller's events, drafts included (`page`, `pageSize`, `status`) |
+| GET    | `/api/me/reservations`             | Customer                | The caller's reservations, soonest event first (`page`, `pageSize`, `status`) |
 | POST   | `/api/reservations/{id}/confirm`   | Its customer            | Confirm before the hold expires → 204           |
 | POST   | `/api/reservations/{id}/cancel`    | Its customer or organizer | Cancel and release seats → 204                |
 | GET    | `/health`                          | Anyone                  | Liveness + database check                       |
@@ -300,7 +303,6 @@ az webapp deploy -g "$(terraform -chdir=infra output -raw resource_group_name)" 
 
 ## Roadmap
 
-- "My events" and "my reservations" list endpoints
 - Swagger UI sign-in with Entra ID (authorization code + PKCE)
 - Idempotency keys on `POST /reservations` so client retries never double-book
 - Azure Service Bus for confirmation emails (outbox pattern)

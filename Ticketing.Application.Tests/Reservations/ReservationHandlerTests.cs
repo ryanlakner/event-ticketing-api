@@ -221,6 +221,82 @@ public sealed class ReservationHandlerTests
     }
 
     [Fact]
+    public async Task ListMyReservations_returns_only_the_callers_reservations_soonest_event_first()
+    {
+        await using var harness = new TestHarness();
+        var now = harness.Clock.GetUtcNow();
+        var later = await CreatePublishedEventAsync(harness, "Later", now.AddDays(9));
+        var sooner = await CreatePublishedEventAsync(harness, "Sooner", now.AddDays(2));
+        await harness.SendAsync(new ReserveTicketsCommand(later, "a@b.com", 1), Users.Customer);
+        await harness.SendAsync(new ReserveTicketsCommand(sooner, "a@b.com", 2), Users.Customer);
+        await harness.SendAsync(
+            new ReserveTicketsCommand(sooner, "c@d.com", 1),
+            Users.OtherCustomer
+        );
+
+        var mine = await harness.QueryAsync(new ListMyReservationsQuery(), Users.Customer);
+
+        mine.TotalCount.ShouldBe(2);
+        mine.Items.Select(r => r.EventName).ShouldBe(["Sooner", "Later"]);
+        mine.Items.ShouldAllBe(r => r.CustomerId == Users.Customer);
+    }
+
+    [Fact]
+    public async Task ListMyReservations_filters_by_status_and_pages()
+    {
+        await using var harness = new TestHarness();
+        var eventId = await harness.CreatePublishedEventAsync();
+        var confirmed = await harness.SendAsync(
+            new ReserveTicketsCommand(eventId, "a@b.com", 1),
+            Users.Customer
+        );
+        await harness.SendAsync(new ConfirmReservationCommand(confirmed), Users.Customer);
+        for (var i = 0; i < 3; i++)
+        {
+            await harness.SendAsync(
+                new ReserveTicketsCommand(eventId, "a@b.com", 1),
+                Users.Customer
+            );
+        }
+
+        var pending = await harness.QueryAsync(
+            new ListMyReservationsQuery(Page: 2, PageSize: 2, Status: ReservationStatus.Pending),
+            Users.Customer
+        );
+
+        pending.TotalCount.ShouldBe(3);
+        pending.TotalPages.ShouldBe(2);
+        pending.Items.Count.ShouldBe(1);
+        pending.Items.ShouldAllBe(r => r.Status == ReservationStatus.Pending);
+    }
+
+    [Theory]
+    [InlineData(0, 20)]
+    [InlineData(1, 101)]
+    public async Task ListMyReservations_rejects_invalid_paging(int page, int pageSize)
+    {
+        await using var harness = new TestHarness();
+
+        await Should.ThrowAsync<ValidationException>(() =>
+            harness.QueryAsync(new ListMyReservationsQuery(page, pageSize), Users.Customer)
+        );
+    }
+
+    private static async Task<Guid> CreatePublishedEventAsync(
+        TestHarness harness,
+        string name,
+        DateTimeOffset startsAt
+    )
+    {
+        var id = await harness.SendAsync(
+            new CreateEventCommand(name, "", "Hall", startsAt, 10),
+            Users.Organizer
+        );
+        await harness.SendAsync(new PublishEventCommand(id), Users.Organizer);
+        return id;
+    }
+
+    [Fact]
     public async Task Stale_writes_are_rejected_by_the_concurrency_token()
     {
         await using var harness = new TestHarness();

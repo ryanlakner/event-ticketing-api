@@ -43,6 +43,14 @@ Authorization: Bearer {{customerToken}}
 GET {{host}}/api/reservations/{{reserve.response.body.$.id}}
 Authorization: Bearer {{customerToken}}
 
+### My reservations, soonest event first (Customer)
+GET {{host}}/api/me/reservations?status=Confirmed
+Authorization: Bearer {{customerToken}}
+
+### My events, drafts included (Organizer)
+GET {{host}}/api/me/events
+Authorization: Bearer {{organizerToken}}
+
 ### Seats available should now be 148 (public)
 GET {{host}}/api/events/{{createEvent.response.body.$.id}}
 

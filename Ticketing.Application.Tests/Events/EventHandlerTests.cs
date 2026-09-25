@@ -188,6 +188,55 @@ public sealed class EventHandlerTests
         page.Items.Select(e => e.Name).ShouldBe(["Sooner", "Later"]);
     }
 
+    [Fact]
+    public async Task ListMyEvents_returns_only_the_callers_events_including_drafts()
+    {
+        await using var harness = new TestHarness();
+        var now = harness.Clock.GetUtcNow();
+        var draft = await harness.SendAsync(
+            new CreateEventCommand("My draft", "", "Hall", now.AddDays(5), 10),
+            Users.Organizer
+        );
+        var published = await harness.CreatePublishedEventAsync(name: "My show");
+        await harness.CreatePublishedEventAsync(
+            name: "Their show",
+            organizer: Users.OtherOrganizer
+        );
+
+        var mine = await harness.QueryAsync(new ListMyEventsQuery(), Users.Organizer);
+
+        mine.TotalCount.ShouldBe(2);
+        mine.Items.Select(e => e.Id).ShouldBe([draft, published], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task ListMyEvents_filters_by_status()
+    {
+        await using var harness = new TestHarness();
+        await harness.SendAsync(
+            new CreateEventCommand("Draft", "", "Hall", harness.Clock.GetUtcNow().AddDays(1), 10),
+            Users.Organizer
+        );
+        var published = await harness.CreatePublishedEventAsync();
+
+        var page = await harness.QueryAsync(
+            new ListMyEventsQuery(Status: EventStatus.Published),
+            Users.Organizer
+        );
+
+        page.Items.Select(e => e.Id).ShouldBe([published]);
+    }
+
+    [Fact]
+    public async Task ListMyEvents_requires_a_signed_in_user()
+    {
+        await using var harness = new TestHarness();
+
+        await Should.ThrowAsync<ForbiddenAccessException>(() =>
+            harness.QueryAsync(new ListMyEventsQuery(), user: null)
+        );
+    }
+
     [Theory]
     [InlineData(0, 20)]
     [InlineData(1, 101)]
