@@ -106,7 +106,13 @@ dotnet ef migrations add <Name> \
   --output-dir Persistence/Migrations
 ```
 
-CI fails if the model has changes with no matching migration.
+CI fails if the model has changes with no matching migration. Every CI run also publishes a **`migrations-sql` artifact**. It's an idempotent T-SQL script covering all migrations, and it's safe to run against a database at any version. You can review schema changes in it as plain SQL, or apply it without EF tooling. To generate it locally:
+
+```bash
+dotnet ef migrations script --idempotent \
+  --project Ticketing.Infrastructure --startup-project Ticketing.Api \
+  --output artifacts/migrations.sql
+```
 
 ## Code style and git hooks
 
@@ -148,6 +154,8 @@ HUSKY=0 dotnet ef migrations bundle --project Ticketing.Infrastructure \
   --startup-project Ticketing.Api -o efbundle --force
 ./efbundle --connection "Server=tcp:$(terraform -chdir=infra output -raw sql_server_fqdn),1433;Database=$(terraform -chdir=infra output -raw sql_database_name);Authentication=Active Directory Default;Encrypt=True;"
 ```
+
+Alternatively, download the `migrations-sql` artifact from a CI run and apply it: `sqlcmd -S <sql_server_fqdn> -d <sql_database_name> -G -i migrations.sql`.
 
 **3. Deploy the app:**
 

@@ -50,6 +50,23 @@ jobs:
           --project Ticketing.Infrastructure --startup-project Ticketing.Api
           --no-build --configuration Release
 
+      # Idempotent SQL covering every migration: safe to run against a database at any version.
+      # Lets the schema be reviewed as plain SQL or applied by hand in environments without EF tooling.
+      - name: Generate migration SQL script
+        run: >
+          dotnet ef migrations script --idempotent
+          --project Ticketing.Infrastructure --startup-project Ticketing.Api
+          --no-build --configuration Release
+          --output artifacts/migrations.sql
+
+      - name: Upload migration SQL script
+        uses: actions/upload-artifact@v7
+        with:
+          name: migrations-sql
+          path: artifacts/migrations.sql
+          if-no-files-found: error
+          retention-days: 30
+
   terraform:
     name: Validate Terraform
     runs-on: ubuntu-latest
