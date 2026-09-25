@@ -24,5 +24,10 @@ variable "github_repository" {
 variable "environments" {
   description = "Environments to prepare. Each gets its own resource group, deploy identity, and GitHub environment."
   type        = set(string)
-  default     = ["dev"]
+  default     = ["dev", "qa", "stg", "prod"]
+
+  validation {
+    condition     = alltrue([for env in var.environments : contains(["dev", "qa", "stg", "prod"], env)])
+    error_message = "environments may only contain dev, qa, stg, and prod."
+  }
 }

@@ -30,4 +30,4 @@ done
 # The deploy workflow is skipped until this is set, so it never fails before bootstrap.
 gh variable set DEPLOY_ENABLED --repo "$repo" --body true
 
-echo "Done. For prod, add required reviewers under Settings → Environments → prod."
+echo "Done. Add required reviewers to stg and prod under Settings → Environments."

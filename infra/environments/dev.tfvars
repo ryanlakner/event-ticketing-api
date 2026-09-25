@@ -1,3 +1,4 @@
+# Shared development environment; deployed automatically after CI passes on main.
 environment      = "dev"
 app_service_sku  = "B1"
 sql_database_sku = "GP_S_Gen5_1"

@@ -1,3 +1,4 @@
+# Production. Add required reviewers to the prod GitHub environment to gate deploys.
 environment                  = "prod"
 app_service_sku              = "P0v3"
 sql_database_sku             = "GP_S_Gen5_2"

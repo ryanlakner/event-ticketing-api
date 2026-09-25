@@ -9,7 +9,14 @@ locals {
     managed_by  = "terraform"
   })
 
-  aspnetcore_environment = var.environment == "prod" ? "Production" : "Staging"
+  # Never "Development" in Azure: that name turns on local-only behaviour such as migrating
+  # on startup. Each environment gets its own name so appsettings.{Name}.json can target it.
+  aspnetcore_environment = {
+    dev  = "Dev"
+    qa   = "QA"
+    stg  = "Staging"
+    prod = "Production"
+  }[var.environment]
 }
 
 # Created by bootstrap/, so the deploy identity only needs Contributor on this group.

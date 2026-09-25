@@ -6,13 +6,14 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # Deploy any environment by hand (prod should require reviewers in its GitHub environment).
+  # Promote to any environment by hand (stg and prod should require reviewers in their
+  # GitHub environments).
   workflow_dispatch:
     inputs:
       environment:
         description: Target environment
         type: choice
-        options: [dev, prod]
+        options: [dev, qa, stg, prod]
         default: dev
 
 permissions:

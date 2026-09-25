@@ -155,13 +155,22 @@ Add `!` after the type or scope, or a `BREAKING CHANGE:` footer, to flag a break
 `infra/` provisions, inside a resource group created by `infra/bootstrap`:
 
 - Log Analytics workspace + workspace-based Application Insights
-- Azure SQL logical server (**Entra ID-only auth**) + serverless General Purpose database (auto-pauses in dev)
+- Azure SQL logical server (**Entra ID-only auth**) + serverless General Purpose database (auto-pauses outside prod)
 - Linux App Service plan + Web App (.NET 10) with a **user-assigned managed identity**, HTTPS only, TLS 1.2, FTPS disabled, and `/health` wired to the platform health check
 - Diagnostic settings that send App Service logs to Log Analytics
 
 ## Deployment (GitHub Actions)
 
-[`deploy.yml`](.github/workflows/deploy.yml) deploys **dev automatically after CI passes on `main`**, and any environment on demand from the Actions tab (**Run workflow**). It signs in to Azure with **OIDC federated credentials**, so no secrets are stored in GitHub.
+[`deploy.yml`](.github/workflows/deploy.yml) deploys **dev automatically after CI passes on `main`**. Other environments are promoted by hand from the Actions tab (**Run workflow**). It signs in to Azure with **OIDC federated credentials**, so no secrets are stored in GitHub.
+
+| Environment | Deployed | Purpose | Sizing |
+| ----------- | -------- | ------- | ------ |
+| `dev` | Automatically, on every green `main` | Shared development | B1 App Service, serverless SQL that auto-pauses, Swagger on, expiry sweep off |
+| `qa` | On demand | Functional testing | Dev-sized, Swagger on, expiry sweep on so holds expire on schedule |
+| `stg` | On demand, with reviewers | Pre-production rehearsal | Same SKUs and settings as prod; the database may pause when idle |
+| `prod` | On demand, with reviewers | Production | P0v3 App Service, always-on SQL, Swagger off |
+
+Each environment has its own `infra/environments/<env>.tfvars`, Terraform state file, resource group, deploy identity, and GitHub environment. To add another environment, add it everywhere the list appears: the tfvars file, the validation in `infra/variables.tf`, the bootstrap `environments` default, and the workflow's `options`. CI fails if those lists drift apart.
 
 ```
 build ──► infrastructure ──► deploy
@@ -187,7 +196,7 @@ Run this as a subscription Owner, with `az login` and `gh auth login` done:
 ```bash
 cd infra/bootstrap
 terraform init
-terraform apply -var="subscription_id=<SUBSCRIPTION_ID>"   # add -var='environments=["dev","prod"]' for prod
+terraform apply -var="subscription_id=<SUBSCRIPTION_ID>"   # all four; limit with -var='environments=["dev"]'
 ./configure-github.sh
 ```
 
@@ -198,7 +207,9 @@ The bootstrap creates:
 - the OIDC federated credentials and role assignments
 - the resource provider registrations the deploy identity can't do itself
 
-`configure-github.sh` then creates the GitHub environments and sets their variables. None of them are secrets. For **prod**, add required reviewers under *Settings → Environments → prod* so every prod deploy waits for approval.
+`configure-github.sh` then creates the GitHub environments and sets their variables. None of them are secrets. For **stg** and **prod**, add required reviewers under *Settings → Environments* so those deploys wait for approval.
+
+Until the bootstrap runs, the Deploy workflow is **skipped** on every push rather than failing, so the repo works fine with no Azure subscription.
 
 The deploy identity is the Azure SQL Entra admin, so the pipeline can run migrations. To query the database yourself, set `TF_VAR_sql_entra_admin_*` to an Entra group that contains both you and the deploy identity.
 
