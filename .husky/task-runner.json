@@ -24,6 +24,7 @@
       ],
       "include": [
         "**/*.cs",
+        "**/*.csx",
         "**/*.csproj",
         "**/*.props",
         "**/*.slnx"
@@ -39,6 +40,7 @@
       ],
       "include": [
         "**/*.cs",
+        "**/*.csx",
         "**/*.csproj",
         "**/*.props",
         "**/*.slnx"

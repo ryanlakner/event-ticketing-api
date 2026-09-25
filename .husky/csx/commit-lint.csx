@@ -17,10 +17,25 @@ const int MaxHeaderLength = 100;
 const string Scissors = "# ------------------------ >8 ------------------------";
 
 // The spec requires feat and fix; the rest follow the widely used Angular convention.
-var types = new[] { "build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test" };
+var types = new[]
+{
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "refactor",
+    "revert",
+    "style",
+    "test",
+};
 
 // Header: type(optional scope)!: description
-var header = new Regex(@"^(?<type>[A-Za-z]+)(?:\((?<scope>[^()\r\n]+)\))?(?<breaking>!)?: (?<description>\S.*)$");
+var header = new Regex(
+    @"^(?<type>[A-Za-z]+)(?:\((?<scope>[^()\r\n]+)\))?(?<breaking>!)?: (?<description>\S.*)$"
+);
 
 // Messages git writes itself, and autosquash markers, are allowed through untouched.
 var generated = new Regex(@"^(Merge |Revert ""|(fixup|squash|amend)! )");
@@ -57,12 +72,16 @@ else if (!generated.IsMatch(lines[0]))
     }
     else if (!types.Contains(match.Groups["type"].Value))
     {
-        errors.Add($"Unknown type '{match.Groups["type"].Value}'. Use one of: {string.Join(", ", types)}.");
+        errors.Add(
+            $"Unknown type '{match.Groups["type"].Value}'. Use one of: {string.Join(", ", types)}."
+        );
     }
 
     if (subject.Length > MaxHeaderLength)
     {
-        errors.Add($"Header is {subject.Length} characters; keep it to {MaxHeaderLength} or fewer.");
+        errors.Add(
+            $"Header is {subject.Length} characters; keep it to {MaxHeaderLength} or fewer."
+        );
     }
 
     if (lines.Count > 1 && lines[1].Length != 0)
@@ -87,7 +106,9 @@ if (errors.Count == 0)
 }
 
 Console.ForegroundColor = ConsoleColor.Red;
-Console.WriteLine("Commit message does not follow Conventional Commits (https://www.conventionalcommits.org/en/v1.0.0/):");
+Console.WriteLine(
+    "Commit message does not follow Conventional Commits (https://www.conventionalcommits.org/en/v1.0.0/):"
+);
 foreach (var error in errors)
 {
     Console.WriteLine($"  - {error}");
