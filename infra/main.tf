@@ -12,18 +12,17 @@ locals {
   aspnetcore_environment = var.environment == "prod" ? "Production" : "Staging"
 }
 
-resource "azurerm_resource_group" "main" {
-  name     = "rg-${local.name}"
-  location = var.location
-  tags     = local.tags
+# Created by bootstrap/, so the deploy identity only needs Contributor on this group.
+data "azurerm_resource_group" "main" {
+  name = "rg-${local.name}"
 }
 
 # --- Observability -----------------------------------------------------------
 
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "log-${local.name}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
   sku                 = "PerGB2018"
   retention_in_days   = var.log_retention_days
   tags                = local.tags
@@ -31,8 +30,8 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 resource "azurerm_application_insights" "main" {
   name                = "appi-${local.name}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
   workspace_id        = azurerm_log_analytics_workspace.main.id
   application_type    = "web"
   tags                = local.tags

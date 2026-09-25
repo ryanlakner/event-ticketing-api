@@ -15,4 +15,8 @@ terraform {
 provider "azurerm" {
   features {}
   subscription_id = var.subscription_id
+
+  # Registering resource providers needs subscription-level rights, which the deploy identity
+  # deliberately lacks. bootstrap/ runs as an Owner and registers them instead.
+  resource_provider_registrations = "none"
 }

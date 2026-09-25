@@ -1,0 +1,28 @@
+variable "subscription_id" {
+  description = "Azure subscription to deploy into."
+  type        = string
+}
+
+variable "project" {
+  description = "Short project name; must match the main configuration."
+  type        = string
+  default     = "ticketing"
+}
+
+variable "location" {
+  description = "Azure region for all resource groups."
+  type        = string
+  default     = "eastus2"
+}
+
+variable "github_repository" {
+  description = "GitHub repository (owner/name) allowed to deploy."
+  type        = string
+  default     = "ryanlakner/event-ticketing-api"
+}
+
+variable "environments" {
+  description = "Environments to prepare. Each gets its own resource group, deploy identity, and GitHub environment."
+  type        = set(string)
+  default     = ["dev"]
+}

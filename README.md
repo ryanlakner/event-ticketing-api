@@ -16,7 +16,7 @@ Organizers create and publish events. Customers reserve seats, which are held fo
 | Observability  | OpenTelemetry → Application Insights (Log Analytics-backed)                |
 | Quality gates  | CSharpier, Conventional Commits, Husky.Net git hooks, GitHub Actions CI    |
 | Tests          | xUnit v3 on Microsoft.Testing.Platform, Shouldly, WebApplicationFactory, SQLite |
-| IaC            | Terraform (`azurerm` 5.x)                                                  |
+| IaC / CD       | Terraform (`azurerm` 5.x), GitHub Actions deploy with OIDC (no secrets)     |
 
 ## How overselling is prevented
 
@@ -76,7 +76,7 @@ Ticketing.Domain.Tests/          Pure business-rule tests.
 Ticketing.Application.Tests/     Handlers through the real dispatcher against SQLite.
 Ticketing.Api.IntegrationTests/  HTTP tests against the real host, including concurrency.
 Ticketing.Testing/               Shared SQLite test database helper.
-infra/                           Terraform for all Azure resources.
+infra/                           Terraform for the app's Azure resources; bootstrap/ for one-time setup.
 .husky/                          Git hooks and task runner config.
 ```
 
@@ -152,37 +152,77 @@ Add `!` after the type or scope, or a `BREAKING CHANGE:` footer, to flag a break
 
 ## Azure infrastructure
 
-`infra/` provisions:
+`infra/` provisions, inside a resource group created by `infra/bootstrap`:
 
-- Resource group
 - Log Analytics workspace + workspace-based Application Insights
 - Azure SQL logical server (**Entra ID-only auth**) + serverless General Purpose database (auto-pauses in dev)
-- Linux App Service plan + Web App (.NET 10) with a **system-assigned managed identity**, HTTPS only, TLS 1.2, FTPS disabled, and `/health` wired to the platform health check
+- Linux App Service plan + Web App (.NET 10) with a **user-assigned managed identity**, HTTPS only, TLS 1.2, FTPS disabled, and `/health` wired to the platform health check
 - Diagnostic settings that send App Service logs to Log Analytics
 
-### Deploy
+## Deployment (GitHub Actions)
+
+[`deploy.yml`](.github/workflows/deploy.yml) deploys **dev automatically after CI passes on `main`**, and any environment on demand from the Actions tab (**Run workflow**). It signs in to Azure with **OIDC federated credentials**, so no secrets are stored in GitHub.
+
+```
+build ──► infrastructure ──► deploy
+  │           │                 ├─ open SQL firewall for this runner
+  │           │                 ├─ apply migrations (EF bundle)
+  │           │                 ├─ grant the API identity database access (idempotent)
+  │           │                 ├─ close firewall (always)
+  │           │                 ├─ zip deploy to App Service
+  │           │                 └─ smoke test /health
+  │           └─ terraform plan + apply
+  └─ dotnet publish + self-contained migrations bundle
+```
+
+- **Least privilege.** Each environment has its own deploy identity, trusted only for jobs bound to that GitHub environment (`repo:…:environment:dev`). It's **Contributor on its own resource group** only, not the subscription.
+- **No Graph permissions.** The API's database user is created `WITH SID` from its managed identity's client ID ([`grant-app-identity.sql`](infra/sql/grant-app-identity.sql)). Azure SQL never needs Directory Readers.
+- **Migrations before code.** Migrations run before the new version ships, so they must stay backward compatible with the version that's live (expand first, then contract in a later release).
+- **Safe by default.** Deploys to the same environment are queued, never cancelled mid-apply. The workflow is skipped until the bootstrap below sets `DEPLOY_ENABLED`.
+
+### One-time setup
+
+Run this as a subscription Owner, with `az login` and `gh auth login` done:
+
+```bash
+cd infra/bootstrap
+terraform init
+terraform apply -var="subscription_id=<SUBSCRIPTION_ID>"   # add -var='environments=["dev","prod"]' for prod
+./configure-github.sh
+```
+
+The bootstrap creates:
+
+- the Terraform state storage account (Entra ID access only, versioned)
+- a resource group and deploy identity for each environment
+- the OIDC federated credentials and role assignments
+- the resource provider registrations the deploy identity can't do itself
+
+`configure-github.sh` then creates the GitHub environments and sets their variables. None of them are secrets. For **prod**, add required reviewers under *Settings → Environments → prod* so every prod deploy waits for approval.
+
+The deploy identity is the Azure SQL Entra admin, so the pipeline can run migrations. To query the database yourself, set `TF_VAR_sql_entra_admin_*` to an Entra group that contains both you and the deploy identity.
+
+### Deploying by hand
+
+Normally the workflow does all of this. To run the same steps locally:
 
 ```bash
 cd infra
-cp backend.hcl.example backend.hcl        # point at your state storage account
-az login
+cp backend.hcl.example backend.hcl          # fill in from `terraform -chdir=bootstrap output`
 terraform init -backend-config=backend.hcl
-terraform apply -var-file=environments/dev.tfvars -var="subscription_id=<SUBSCRIPTION_ID>"
+terraform apply -var-file=environments/dev.tfvars -var="subscription_id=<SUBSCRIPTION_ID>" \
+  -var="sql_entra_admin_login=<name>" -var="sql_entra_admin_object_id=<object id>"
 ```
 
-**1. Grant the API's managed identity access to the database** (one time per environment). Connect as the Entra SQL admin, for example with `sqlcmd -G` or Azure Data Studio. Then run [`infra/sql/grant-app-identity.sql`](infra/sql/grant-app-identity.sql).
-
-**2. Apply migrations.** Add your IP to `sql_allowed_ip_addresses`, then run:
+Then add your IP to `sql_allowed_ip_addresses` and run the migrations. The bundle reads its connection string from configuration, so pass it as an environment variable:
 
 ```bash
 HUSKY=0 dotnet ef migrations bundle --project Ticketing.Infrastructure \
   --startup-project Ticketing.Api -o efbundle --force
-./efbundle --connection "Server=tcp:$(terraform -chdir=infra output -raw sql_server_fqdn),1433;Database=$(terraform -chdir=infra output -raw sql_database_name);Authentication=Active Directory Default;Encrypt=True;"
+ConnectionStrings__Database="Server=tcp:$(terraform -chdir=infra output -raw sql_server_fqdn),1433;Database=$(terraform -chdir=infra output -raw sql_database_name);Authentication=Active Directory Default;Encrypt=True;" ./efbundle
 ```
 
-Alternatively, download the `migrations-sql` artifact from a CI run and apply it: `sqlcmd -S <sql_server_fqdn> -d <sql_database_name> -G -i migrations.sql`.
-
-**3. Deploy the app:**
+Alternatively, apply the `migrations-sql` artifact from a CI run: `sqlcmd -S <sql_server_fqdn> -d <sql_database_name> --authentication-method ActiveDirectoryAzCli -i migrations.sql`. Grant the API identity access with [`grant-app-identity.sql`](infra/sql/grant-app-identity.sql) (see its header for the `sqlcmd` command). Then deploy the app:
 
 ```bash
 HUSKY=0 dotnet publish Ticketing.Api -c Release -o publish
@@ -208,4 +248,4 @@ az webapp deploy -g "$(terraform -chdir=infra output -raw resource_group_name)" 
 - Entra ID authentication with organizer and customer roles
 - Idempotency keys on `POST /reservations` so client retries never double-book
 - Azure Service Bus for confirmation emails (outbox pattern)
-- GitHub Actions deployment with OIDC federated credentials
+- Terraform plan preview on pull requests

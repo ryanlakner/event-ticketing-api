@@ -1,8 +1,8 @@
 # Azure SQL with Entra ID-only authentication: no SQL passwords exist anywhere.
 resource "azurerm_mssql_server" "main" {
   name                          = "sql-${local.name}"
-  resource_group_name           = azurerm_resource_group.main.name
-  location                      = azurerm_resource_group.main.location
+  resource_group_name           = data.azurerm_resource_group.main.name
+  location                      = data.azurerm_resource_group.main.location
   version                       = "12.0"
   minimum_tls_version           = "1.2"
   public_network_access_enabled = true

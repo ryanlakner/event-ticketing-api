@@ -127,8 +127,11 @@ jobs:
       - name: Format
         run: terraform fmt -check -recursive
 
-      - name: Init
-        run: terraform init -backend=false -input=false
-
       - name: Validate
-        run: terraform validate
+        run: |
+          for dir in . bootstrap; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+            echo "::endgroup::"
+          done

@@ -1,23 +1,34 @@
 resource "azurerm_service_plan" "main" {
   name                = "asp-${local.name}"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
   os_type             = "Linux"
   sku_name            = var.app_service_sku
   tags                = local.tags
 }
 
+# User-assigned (rather than system-assigned) so the identity outlives the web app and its
+# client ID is known to Terraform. The deploy workflow uses that ID to create the database
+# user WITH SID, which avoids granting Azure SQL Microsoft Graph permissions.
+resource "azurerm_user_assigned_identity" "api" {
+  name                = "id-${local.name}-api"
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  tags                = local.tags
+}
+
 resource "azurerm_linux_web_app" "api" {
   name                = "app-${local.name}-api"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
   service_plan_id     = azurerm_service_plan.main.id
   https_only          = true
   tags                = local.tags
 
   # The API authenticates to Azure SQL with this identity (see sql/grant-app-identity.sql).
   identity {
-    type = "SystemAssigned"
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.api.id]
   }
 
   site_config {
@@ -36,6 +47,7 @@ resource "azurerm_linux_web_app" "api" {
   app_settings = {
     ASPNETCORE_ENVIRONMENT                = local.aspnetcore_environment
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.main.connection_string
+    AZURE_CLIENT_ID                       = azurerm_user_assigned_identity.api.client_id
     Swagger__Enabled                      = tostring(var.enable_swagger)
     Reservations__ExpirySweepEnabled      = tostring(var.reservation_expiry_sweep_enabled)
   }
@@ -44,7 +56,7 @@ resource "azurerm_linux_web_app" "api" {
   connection_string {
     name  = "Database"
     type  = "SQLAzure"
-    value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.main.name};Authentication=Active Directory Managed Identity;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;"
+    value = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Database=${azurerm_mssql_database.main.name};Authentication=Active Directory Managed Identity;User Id=${azurerm_user_assigned_identity.api.client_id};Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;"
   }
 
   logs {

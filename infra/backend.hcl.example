@@ -1,6 +1,7 @@
-# Copy to backend.hcl (git-ignored) and point at a pre-created storage account.
-resource_group_name  = "rg-tfstate"
-storage_account_name = "sttfstateticketing"
+# For running Terraform locally. Copy to backend.hcl (git-ignored); values come from
+# `terraform -chdir=infra/bootstrap output`. The deploy workflow passes these itself.
+resource_group_name  = "rg-ticketing-shared"
+storage_account_name = "<state_storage_account output>"
 container_name       = "tfstate"
 key                  = "ticketing-dev.tfstate"
 use_azuread_auth     = true

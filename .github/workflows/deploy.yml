@@ -1,0 +1,225 @@
+name: Deploy
+
+on:
+  # Deploy to dev automatically once CI passes on main.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Deploy any environment by hand (prod should require reviewers in its GitHub environment).
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+  id-token: write # Lets jobs request a GitHub OIDC token to sign in to Azure; no secrets stored.
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false # Never interrupt a Terraform apply or migration halfway.
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  HUSKY: 0
+  TARGET_ENV: ${{ inputs.environment || 'dev' }}
+  # The exact commit CI tested (workflow_run) or the dispatched ref.
+  COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  build:
+    name: Build release artifacts
+    # DEPLOY_ENABLED is set by infra/bootstrap/configure-github.sh; until then, skip quietly.
+    if: >
+      vars.DEPLOY_ENABLED == 'true' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push'
+        )
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Publish API
+        run: dotnet publish Ticketing.Api --configuration Release --output artifacts/api
+
+      # A self-contained executable that applies pending migrations; no SDK needed to run it.
+      - name: Build migrations bundle
+        run: >
+          dotnet ef migrations bundle
+          --project Ticketing.Infrastructure --startup-project Ticketing.Api
+          --configuration Release --self-contained --target-runtime linux-x64
+          --output artifacts/efbundle
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            artifacts/api
+            artifacts/efbundle
+          if-no-files-found: error
+          retention-days: 30
+
+  infrastructure:
+    name: Apply Terraform
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      # The azurerm provider and backend exchange the GitHub OIDC token for Azure credentials.
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_IN_AUTOMATION: true
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # The deploy identity administers SQL so later steps can migrate and grant access.
+      TF_VAR_sql_entra_admin_login: ${{ vars.DEPLOY_IDENTITY_NAME }}
+      TF_VAR_sql_entra_admin_object_id: ${{ vars.DEPLOY_IDENTITY_PRINCIPAL_ID }}
+    defaults:
+      run:
+        working-directory: infra
+    outputs:
+      resource_group_name: ${{ steps.outputs.outputs.resource_group_name }}
+      api_app_name: ${{ steps.outputs.outputs.api_app_name }}
+      api_url: ${{ steps.outputs.outputs.api_url }}
+      api_identity_name: ${{ steps.outputs.outputs.api_identity_name }}
+      api_identity_client_id: ${{ steps.outputs.outputs.api_identity_client_id }}
+      sql_server_name: ${{ steps.outputs.outputs.sql_server_name }}
+      sql_server_fqdn: ${{ steps.outputs.outputs.sql_server_fqdn }}
+      sql_database_name: ${{ steps.outputs.outputs.sql_database_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false # Keep `terraform output -raw` free of wrapper noise.
+
+      - name: Init
+        run: >
+          terraform init -input=false
+          -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=ticketing-${TARGET_ENV}.tfstate"
+          -backend-config="use_azuread_auth=true"
+
+      - name: Plan
+        run: terraform plan -input=false -var-file="environments/${TARGET_ENV}.tfvars" -out=tfplan
+
+      - name: Apply
+        run: terraform apply -input=false tfplan
+
+      - name: Export outputs
+        id: outputs
+        run: |
+          for name in resource_group_name api_app_name api_url api_identity_name \
+                      api_identity_client_id sql_server_name sql_server_fqdn sql_database_name; do
+            echo "$name=$(terraform output -raw "$name")" >> "$GITHUB_OUTPUT"
+          done
+
+  deploy:
+    name: Migrate database and deploy API
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment || 'dev' }}
+      url: ${{ needs.infrastructure.outputs.api_url }}/swagger
+    env:
+      RESOURCE_GROUP: ${{ needs.infrastructure.outputs.resource_group_name }}
+      SQL_SERVER: ${{ needs.infrastructure.outputs.sql_server_name }}
+      SQL_FQDN: ${{ needs.infrastructure.outputs.sql_server_fqdn }}
+      SQL_DATABASE: ${{ needs.infrastructure.outputs.sql_database_name }}
+      FIREWALL_RULE: github-run-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+          sparse-checkout: infra/sql
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: artifacts
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install go-sqlcmd
+        run: |
+          curl -fsSL https://github.com/microsoft/go-sqlcmd/releases/download/v1.10.0/sqlcmd-linux-amd64.tar.bz2 \
+            | sudo tar -xj -C /usr/local/bin sqlcmd
+          sqlcmd --version
+
+      - name: Allow this runner through the SQL firewall
+        run: |
+          ip=$(curl -fsS https://api.ipify.org)
+          az sql server firewall-rule create --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" \
+            --name "$FIREWALL_RULE" --start-ip-address "$ip" --end-ip-address "$ip" --output none
+
+      # Migrations run before the new code ships, so they must stay backward compatible with
+      # the version currently live (expand first; contract in a later release).
+      - name: Apply migrations
+        env:
+          # Entra ID auth via the Azure CLI session from azure/login; no SQL passwords.
+          ConnectionStrings__Database: >-
+            Server=tcp:${{ env.SQL_FQDN }},1433;Database=${{ env.SQL_DATABASE }};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=60
+        run: |
+          chmod +x artifacts/efbundle
+          artifacts/efbundle
+
+      - name: Grant the API identity database access
+        run: >
+          sqlcmd -S "$SQL_FQDN" -d "$SQL_DATABASE"
+          --authentication-method ActiveDirectoryAzCli -b
+          -v AppIdentityName="${{ needs.infrastructure.outputs.api_identity_name }}"
+          -v AppIdentityClientId="${{ needs.infrastructure.outputs.api_identity_client_id }}"
+          -i infra/sql/grant-app-identity.sql
+
+      - name: Remove firewall rule
+        if: always()
+        run: |
+          az sql server firewall-rule delete --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" \
+            --name "$FIREWALL_RULE" --output none || true
+
+      - name: Deploy API to App Service
+        run: |
+          (cd artifacts/api && zip -qr ../api.zip .)
+          az webapp deploy --resource-group "$RESOURCE_GROUP" \
+            --name "${{ needs.infrastructure.outputs.api_app_name }}" \
+            --src-path artifacts/api.zip --type zip --output none
+
+      - name: Smoke test
+        env:
+          API_URL: ${{ needs.infrastructure.outputs.api_url }}
+        run: |
+          # Allow time for the app to start and a paused serverless database to resume.
+          for attempt in $(seq 1 30); do
+            if [ "$(curl -fsS --max-time 30 "$API_URL/health" || true)" = "Healthy" ]; then
+              echo "Healthy after $attempt attempt(s): $API_URL"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$API_URL/health did not report Healthy"
+          exit 1

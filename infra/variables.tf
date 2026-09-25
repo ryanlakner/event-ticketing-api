@@ -24,12 +24,6 @@ variable "environment" {
   }
 }
 
-variable "location" {
-  description = "Azure region."
-  type        = string
-  default     = "eastus2"
-}
-
 variable "app_service_sku" {
   description = "App Service plan SKU. B1 is the cheapest tier with Always On."
   type        = string
@@ -49,7 +43,7 @@ variable "sql_auto_pause_delay_minutes" {
 }
 
 variable "sql_entra_admin_login" {
-  description = "Display name of the Entra ID user or group that administers Azure SQL."
+  description = "Name of the Entra ID principal that administers Azure SQL. The deploy workflow passes its own identity so it can run migrations."
   type        = string
 }
 
