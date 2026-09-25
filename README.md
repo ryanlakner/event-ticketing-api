@@ -310,6 +310,4 @@ az webapp deploy -g "$(terraform -chdir=infra output -raw resource_group_name)" 
 
 ## Roadmap
 
-- Idempotency keys on `POST /reservations` so client retries never double-book
-- Azure Service Bus for confirmation emails (outbox pattern)
-- Terraform plan preview on pull requests
+See [ROADMAP.md](ROADMAP.md) for what's done and what's next, phase by phase. Each item has a "done when" checklist and the Conventional Commit type to use.
