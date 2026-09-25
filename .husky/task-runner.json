@@ -2,36 +2,76 @@
   "$schema": "https://alirezanet.github.io/Husky.Net/schema.json",
   "tasks": [
     {
+      "name": "conventional-commit-message",
+      "group": "commit-msg",
+      "command": "dotnet",
+      "args": [
+        "husky",
+        "exec",
+        ".husky/csx/commit-lint.csx",
+        "--args",
+        "${args}"
+      ]
+    },
+    {
       "name": "csharpier-format-staged",
       "group": "pre-commit",
       "command": "dotnet",
-      "args": ["csharpier", "format", "${staged}"],
-      "include": ["**/*.cs", "**/*.csproj", "**/*.props", "**/*.slnx"]
+      "args": [
+        "csharpier",
+        "format",
+        "${staged}"
+      ],
+      "include": [
+        "**/*.cs",
+        "**/*.csproj",
+        "**/*.props",
+        "**/*.slnx"
+      ]
     },
     {
       "name": "restage-formatted-files",
       "group": "pre-commit",
       "command": "git",
-      "args": ["add", "${staged}"],
-      "include": ["**/*.cs", "**/*.csproj", "**/*.props", "**/*.slnx"]
+      "args": [
+        "add",
+        "${staged}"
+      ],
+      "include": [
+        "**/*.cs",
+        "**/*.csproj",
+        "**/*.props",
+        "**/*.slnx"
+      ]
     },
     {
       "name": "csharpier-check",
       "group": "pre-push",
       "command": "dotnet",
-      "args": ["csharpier", "check", "."]
+      "args": [
+        "csharpier",
+        "check",
+        "."
+      ]
     },
     {
       "name": "build",
       "group": "pre-push",
       "command": "dotnet",
-      "args": ["build", "--no-restore", "-warnaserror"]
+      "args": [
+        "build",
+        "--no-restore",
+        "-warnaserror"
+      ]
     },
     {
       "name": "test",
       "group": "pre-push",
       "command": "dotnet",
-      "args": ["test", "--no-build"]
+      "args": [
+        "test",
+        "--no-build"
+      ]
     }
   ]
 }

@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Husky.Net C# scripts (the template above ignores every csx/ folder)
+!.husky/csx/

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited] # "edited" re-checks a renamed PR title.
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,51 @@ env:
   HUSKY: 0 # Git hooks are for local development only.
 
 jobs:
+  commits:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Full history so the pushed or PR commit range is available.
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      # Same script as the local commit-msg hook, so commits made on github.com or with
+      # --no-verify are held to the same rules.
+      - name: Lint commit messages
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "No commit range to check."
+            exit 0
+          fi
+
+          status=0
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            echo "::group::$(git log -1 --format='%h %s' "$sha")"
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/message"
+            dotnet husky exec .husky/csx/commit-lint.csx --args "$RUNNER_TEMP/message" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      # With squash merges the PR title becomes the commit message on main.
+      - name: Lint pull request title
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$TITLE" > "$RUNNER_TEMP/title"
+          dotnet husky exec .husky/csx/commit-lint.csx --args "$RUNNER_TEMP/title"
+
   dotnet:
     name: Build and test
     runs-on: ubuntu-latest

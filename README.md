@@ -14,7 +14,7 @@ Organizers create and publish events. Customers reserve seats, which are held fo
 | Persistence    | EF Core 10 on Azure SQL with Entra ID (Managed Identity) auth, no passwords |
 | API docs       | Swagger / Swashbuckle with XML doc comments                                |
 | Observability  | OpenTelemetry → Application Insights (Log Analytics-backed)                |
-| Quality gates  | CSharpier + Husky.Net git hooks, GitHub Actions CI                         |
+| Quality gates  | CSharpier, Conventional Commits, Husky.Net git hooks, GitHub Actions CI    |
 | Tests          | xUnit v3 on Microsoft.Testing.Platform, Shouldly, WebApplicationFactory, SQLite |
 | IaC            | Terraform (`azurerm` 5.x)                                                  |
 
@@ -114,16 +114,41 @@ dotnet ef migrations script --idempotent \
   --output artifacts/migrations.sql
 ```
 
-## Code style and git hooks
+## Code style, commits, and git hooks
 
 CSharpier (`.csharpierrc.json`) is the only formatter. Husky.Net hooks install automatically on `dotnet restore`:
 
-| Hook         | Runs                                                            |
-| ------------ | --------------------------------------------------------------- |
-| `pre-commit` | `csharpier format` on staged files, then re-stages them         |
-| `pre-push`   | `csharpier check .`, `dotnet build -warnaserror`, `dotnet test` |
+| Hook         | Runs                                                              |
+| ------------ | ----------------------------------------------------------------- |
+| `pre-commit` | `csharpier format` on staged files, then re-stages them           |
+| `commit-msg` | Rejects messages that don't follow Conventional Commits           |
+| `pre-push`   | `csharpier check .`, `dotnet build -warnaserror`, `dotnet test`   |
 
 Set `HUSKY=0` to skip installing the hooks (CI does this).
+
+### Commit messages
+
+Commits follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<type>(<optional scope>)<optional !>: <description>
+
+<optional body>
+
+<optional footers, e.g. BREAKING CHANGE: ...>
+```
+
+| Type | Use for |
+| ---- | ------- |
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs`, `style`, `refactor`, `perf`, `test` | Changes that don't alter behavior, or only speed it up |
+| `build`, `ci`, `chore` | Tooling, pipelines, dependencies, housekeeping |
+| `revert` | Reverting an earlier commit |
+
+Add `!` after the type or scope, or a `BREAKING CHANGE:` footer, to flag a breaking change. For example: `feat(reservations): let customers cancel pending holds`.
+
+[`.husky/csx/commit-lint.csx`](.husky/csx/commit-lint.csx) enforces the rules. The `commit-msg` hook and CI both run it, so commits made on github.com or with `--no-verify` are still checked, and so are pull request titles, which become the commit when squash merging. Git's own `Merge`/`Revert` messages and `fixup!`/`squash!` commits are allowed through.
 
 ## Azure infrastructure
 
