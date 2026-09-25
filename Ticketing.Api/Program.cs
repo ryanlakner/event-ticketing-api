@@ -1,9 +1,14 @@
 using System.Text.Json.Serialization;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 using Ticketing.Api.BackgroundJobs;
 using Ticketing.Api.ExceptionHandling;
+using Ticketing.Api.Identity;
+using Ticketing.Api.OpenApi;
 using Ticketing.Application;
+using Ticketing.Application.Abstractions.Identity;
 using Ticketing.Application.Reservations;
 using Ticketing.Infrastructure;
 
@@ -14,6 +19,25 @@ builder.Services.Configure<ReservationOptions>(
     builder.Configuration.GetSection(ReservationOptions.SectionName)
 );
 builder.Services.AddHostedService<ReservationExpiryService>();
+
+// Token settings (authority, issuer, audiences) bind from Authentication:Schemes:Bearer:
+// Entra ID in Azure (set by Terraform), `dotnet user-jwts` locally.
+builder
+    .Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Fail closed: if an environment is missing issuer or audience settings, reject every
+        // token rather than accepting tokens minted for some other application.
+        options.TokenValidationParameters.ValidateIssuer = true;
+        options.TokenValidationParameters.ValidateAudience = true;
+    });
+
+// Secure by default: every endpoint needs a signed-in user unless marked [AllowAnonymous].
+builder
+    .Services.AddAuthorizationBuilder()
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
 builder
     .Services.AddControllers(options =>
@@ -38,6 +62,17 @@ builder.Services.AddSwaggerGen(options =>
             Description = "Create events, reserve seats, and confirm tickets without overselling.",
         }
     );
+    options.AddSecurityDefinition(
+        AuthorizeOperationFilter.SchemeName,
+        new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "An Entra ID access token, or one from `dotnet user-jwts` locally.",
+        }
+    );
+    options.OperationFilter<AuthorizeOperationFilter>();
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml"),
         includeControllerXmlComments: true
@@ -61,8 +96,11 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger
     app.UseSwaggerUI(options => options.DocumentTitle = "Event Ticketing API");
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous();
 
 if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
 {

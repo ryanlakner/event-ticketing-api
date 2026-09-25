@@ -15,6 +15,9 @@ public sealed class Reservation : Entity
 
     public Guid EventId { get; private set; }
 
+    /// <summary>The user (Entra ID object ID) who made the reservation.</summary>
+    public string CustomerId { get; private set; } = string.Empty;
+
     public string CustomerEmail { get; private set; } = string.Empty;
 
     public int Quantity { get; private set; }
@@ -26,17 +29,25 @@ public sealed class Reservation : Entity
 
     public DateTimeOffset? ConfirmedAt { get; private set; }
 
+    public bool IsHeldBy(string? userId) => userId is not null && userId == CustomerId;
+
     /// <summary>Whether the reservation is currently holding seats.</summary>
     public bool IsActive => Status is ReservationStatus.Pending or ReservationStatus.Confirmed;
 
     internal static Reservation Create(
         Guid eventId,
+        string customerId,
         string customerEmail,
         int quantity,
         DateTimeOffset now,
         DateTimeOffset expiresAt
     )
     {
+        if (string.IsNullOrWhiteSpace(customerId))
+        {
+            throw new DomainException("A reservation must belong to a customer.");
+        }
+
         if (string.IsNullOrWhiteSpace(customerEmail))
         {
             throw new DomainException("Customer email is required.");
@@ -45,6 +56,7 @@ public sealed class Reservation : Entity
         return new Reservation
         {
             EventId = eventId,
+            CustomerId = customerId,
             CustomerEmail = customerEmail.Trim().ToLowerInvariant(),
             Quantity = quantity,
             Status = ReservationStatus.Pending,

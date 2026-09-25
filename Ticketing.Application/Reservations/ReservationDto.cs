@@ -7,6 +7,7 @@ public sealed record ReservationDto(
     Guid EventId,
     string EventName,
     DateTimeOffset EventStartsAt,
+    string CustomerId,
     string CustomerEmail,
     int Quantity,
     ReservationStatus Status,

@@ -41,6 +41,12 @@ internal sealed partial class GlobalExceptionHandler(
                 Title = "Conflict",
                 Detail = "The resource was modified by another request. Please retry.",
             },
+            ForbiddenAccessException forbidden => new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = forbidden.Message,
+            },
             NotFoundException notFound => new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,

@@ -1,6 +1,8 @@
 using FluentValidation;
 using Ticketing.Application.Abstractions.Data;
+using Ticketing.Application.Abstractions.Identity;
 using Ticketing.Application.Abstractions.Messaging;
+using Ticketing.Application.Common.Security;
 using Ticketing.Domain.Events;
 
 namespace Ticketing.Application.Events.Commands;
@@ -20,8 +22,11 @@ internal sealed class CreateEventCommandValidator : AbstractValidator<CreateEven
         Include(new EventDetailsValidator(clock));
 }
 
-internal sealed class CreateEventCommandHandler(IApplicationDbContext db, TimeProvider clock)
-    : ICommandHandler<CreateEventCommand, Guid>
+internal sealed class CreateEventCommandHandler(
+    IApplicationDbContext db,
+    TimeProvider clock,
+    ICurrentUser user
+) : ICommandHandler<CreateEventCommand, Guid>
 {
     public async Task<Guid> HandleAsync(
         CreateEventCommand command,
@@ -29,6 +34,7 @@ internal sealed class CreateEventCommandHandler(IApplicationDbContext db, TimePr
     )
     {
         var @event = Event.Create(
+            user.RequireId(),
             command.Name,
             command.Description,
             command.Venue,

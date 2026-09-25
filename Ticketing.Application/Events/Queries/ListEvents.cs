@@ -1,13 +1,14 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Ticketing.Application.Abstractions.Data;
+using Ticketing.Application.Abstractions.Identity;
 using Ticketing.Application.Abstractions.Messaging;
 using Ticketing.Application.Common.Models;
 using Ticketing.Domain.Events;
 
 namespace Ticketing.Application.Events.Queries;
 
-/// <summary>Pages through events ordered by start time.</summary>
+/// <summary>Pages through events ordered by start time. Drafts appear only to their organizer.</summary>
 public sealed record ListEventsQuery(
     int Page = 1,
     int PageSize = 20,
@@ -28,7 +29,7 @@ internal sealed class ListEventsQueryValidator : AbstractValidator<ListEventsQue
     }
 }
 
-internal sealed class ListEventsQueryHandler(IApplicationDbContext db)
+internal sealed class ListEventsQueryHandler(IApplicationDbContext db, ICurrentUser user)
     : IQueryHandler<ListEventsQuery, PagedResult<EventDto>>
 {
     public async Task<PagedResult<EventDto>> HandleAsync(
@@ -36,7 +37,7 @@ internal sealed class ListEventsQueryHandler(IApplicationDbContext db)
         CancellationToken cancellationToken
     )
     {
-        var events = db.Events.AsNoTracking();
+        var events = db.Events.AsNoTracking().Where(EventAccess.VisibleTo(user.Id));
 
         if (query.Status is { } status)
         {

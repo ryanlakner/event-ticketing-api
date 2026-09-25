@@ -6,9 +6,14 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 5.7"
     }
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 3.10"
+    }
   }
 
-  # Local state on purpose: this runs once, by a subscription Owner, before remote state exists.
+  # Local state on purpose: this runs once, by a subscription Owner (who can also create Entra ID
+  # app registrations), before remote state exists.
 }
 
 provider "azurerm" {
@@ -28,3 +33,6 @@ provider "azurerm" {
     "Microsoft.Web",
   ]
 }
+
+# Uses the tenant of the signed-in Azure CLI account.
+provider "azuread" {}

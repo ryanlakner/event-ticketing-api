@@ -92,6 +92,8 @@ jobs:
       # The deploy identity administers SQL so later steps can migrate and grant access.
       TF_VAR_sql_entra_admin_login: ${{ vars.DEPLOY_IDENTITY_NAME }}
       TF_VAR_sql_entra_admin_object_id: ${{ vars.DEPLOY_IDENTITY_PRINCIPAL_ID }}
+      # The Entra ID app registration whose tokens this environment accepts.
+      TF_VAR_api_client_id: ${{ vars.API_CLIENT_ID }}
     defaults:
       run:
         working-directory: infra

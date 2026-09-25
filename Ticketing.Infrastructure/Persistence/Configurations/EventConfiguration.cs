@@ -22,6 +22,7 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.Property(e => e.Id).ValueGeneratedNever();
         builder.Property(e => e.Version).IsConcurrencyToken();
 
+        builder.Property(e => e.OrganizerId).HasMaxLength(Event.UserIdMaxLength);
         builder.Property(e => e.Name).HasMaxLength(Event.NameMaxLength);
         builder.Property(e => e.Description).HasMaxLength(Event.DescriptionMaxLength);
         builder.Property(e => e.Venue).HasMaxLength(Event.VenueMaxLength);
@@ -29,5 +30,6 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.Ignore(e => e.SeatsAvailable);
 
         builder.HasIndex(e => new { e.Status, e.StartsAt });
+        builder.HasIndex(e => e.OrganizerId);
     }
 }

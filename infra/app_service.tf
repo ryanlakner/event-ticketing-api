@@ -50,6 +50,13 @@ resource "azurerm_linux_web_app" "api" {
     AZURE_CLIENT_ID                       = azurerm_user_assigned_identity.api.client_id
     Swagger__Enabled                      = tostring(var.enable_swagger)
     Reservations__ExpirySweepEnabled      = tostring(var.reservation_expiry_sweep_enabled)
+
+    # Access tokens: Entra ID for this tenant, issued for this environment's app registration.
+    # v2 tokens carry the client ID as the audience; the api:// URI is accepted too.
+    Authentication__Schemes__Bearer__Authority         = local.entra_authority
+    Authentication__Schemes__Bearer__ValidIssuer       = local.entra_authority
+    Authentication__Schemes__Bearer__ValidAudiences__0 = var.api_client_id
+    Authentication__Schemes__Bearer__ValidAudiences__1 = "api://${var.api_client_id}"
   }
 
   # Surfaces to the app as ConnectionStrings:Database.

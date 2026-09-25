@@ -14,9 +14,13 @@ public sealed class Event : Entity
     public const int VenueMaxLength = 200;
     public const int MaxCapacity = 100_000;
     public const int MaxTicketsPerReservation = 10;
+    public const int UserIdMaxLength = 128;
 
     // Required by EF Core.
     private Event() { }
+
+    /// <summary>The user (Entra ID object ID) who created and manages the event.</summary>
+    public string OrganizerId { get; private set; } = string.Empty;
 
     public string Name { get; private set; } = string.Empty;
 
@@ -36,6 +40,7 @@ public sealed class Event : Entity
     public int SeatsAvailable => Capacity - SeatsReserved;
 
     public static Event Create(
+        string organizerId,
         string name,
         string description,
         string venue,
@@ -44,7 +49,17 @@ public sealed class Event : Entity
         DateTimeOffset now
     )
     {
-        var @event = new Event { CreatedAt = now, Status = EventStatus.Draft };
+        if (string.IsNullOrWhiteSpace(organizerId))
+        {
+            throw new DomainException("An event must have an organizer.");
+        }
+
+        var @event = new Event
+        {
+            OrganizerId = organizerId,
+            CreatedAt = now,
+            Status = EventStatus.Draft,
+        };
         @event.SetDetails(name, description, venue, startsAt, capacity, now);
         return @event;
     }
@@ -101,7 +116,10 @@ public sealed class Event : Entity
     }
 
     /// <summary>Holds seats for a customer until the reservation is confirmed or expires.</summary>
+    public bool IsOrganizedBy(string? userId) => userId is not null && userId == OrganizerId;
+
     public Reservation Reserve(
+        string customerId,
         string customerEmail,
         int quantity,
         DateTimeOffset now,
@@ -134,7 +152,7 @@ public sealed class Event : Entity
         SeatsReserved += quantity;
         MarkModified(now);
 
-        return Reservation.Create(Id, customerEmail, quantity, now, now + holdDuration);
+        return Reservation.Create(Id, customerId, customerEmail, quantity, now, now + holdDuration);
     }
 
     public void CancelReservation(Reservation reservation, DateTimeOffset now)

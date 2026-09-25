@@ -42,6 +42,16 @@ variable "sql_auto_pause_delay_minutes" {
   default     = 60
 }
 
+variable "api_client_id" {
+  description = "Client ID of this environment's Entra ID app registration (created by bootstrap/). Access tokens must be issued for it."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$", var.api_client_id))
+    error_message = "api_client_id must be a GUID."
+  }
+}
+
 variable "sql_entra_admin_login" {
   description = "Name of the Entra ID principal that administers Azure SQL. The deploy workflow passes its own identity so it can run migrations."
   type        = string

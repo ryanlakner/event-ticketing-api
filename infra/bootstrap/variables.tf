@@ -31,3 +31,9 @@ variable "environments" {
     error_message = "environments may only contain dev, qa, stg, and prod."
   }
 }
+
+variable "operator_role_environments" {
+  description = "Environments where whoever runs the bootstrap is granted both app roles, so they can try the API straight away."
+  type        = set(string)
+  default     = ["dev", "qa"]
+}

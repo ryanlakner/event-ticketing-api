@@ -1,5 +1,6 @@
 using FluentValidation;
 using Ticketing.Application.Abstractions.Data;
+using Ticketing.Application.Abstractions.Identity;
 using Ticketing.Application.Abstractions.Messaging;
 using Ticketing.Application.Common.Exceptions;
 using Ticketing.Domain.Events;
@@ -24,8 +25,11 @@ internal sealed class UpdateEventCommandValidator : AbstractValidator<UpdateEven
     }
 }
 
-internal sealed class UpdateEventCommandHandler(IApplicationDbContext db, TimeProvider clock)
-    : ICommandHandler<UpdateEventCommand, Unit>
+internal sealed class UpdateEventCommandHandler(
+    IApplicationDbContext db,
+    TimeProvider clock,
+    ICurrentUser user
+) : ICommandHandler<UpdateEventCommand, Unit>
 {
     public async Task<Unit> HandleAsync(
         UpdateEventCommand command,
@@ -35,6 +39,7 @@ internal sealed class UpdateEventCommandHandler(IApplicationDbContext db, TimePr
         var @event =
             await db.Events.FindAsync([command.Id], cancellationToken)
             ?? throw new NotFoundException(nameof(Event), command.Id);
+        EventAccess.EnsureCanManage(@event, user);
 
         @event.UpdateDetails(
             command.Name,

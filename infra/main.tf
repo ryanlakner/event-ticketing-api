@@ -11,6 +11,9 @@ locals {
 
   # Never "Development" in Azure: that name turns on local-only behaviour such as migrating
   # on startup. Each environment gets its own name so appsettings.{Name}.json can target it.
+  # Entra ID v2 endpoint for this tenant: tokens are issued by, and signing keys published at, it.
+  entra_authority = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/v2.0"
+
   aspnetcore_environment = {
     dev  = "Dev"
     qa   = "QA"

@@ -18,6 +18,7 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
         builder.Property(r => r.Id).ValueGeneratedNever();
         builder.Property(r => r.Version).IsConcurrencyToken();
 
+        builder.Property(r => r.CustomerId).HasMaxLength(Event.UserIdMaxLength);
         builder.Property(r => r.CustomerEmail).HasMaxLength(Reservation.EmailMaxLength);
         builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
         builder.Ignore(r => r.IsActive);
@@ -31,5 +32,6 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
         // Supports the expiry sweep: WHERE Status = 'Pending' AND ExpiresAt <= @now.
         builder.HasIndex(r => new { r.Status, r.ExpiresAt });
         builder.HasIndex(r => r.EventId);
+        builder.HasIndex(r => r.CustomerId);
     }
 }

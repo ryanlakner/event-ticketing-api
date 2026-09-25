@@ -2,9 +2,12 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Ticketing.Application.Abstractions.Data;
+using Ticketing.Application.Abstractions.Identity;
 using Ticketing.Application.Abstractions.Messaging;
 using Ticketing.Application.Common.Concurrency;
 using Ticketing.Application.Common.Exceptions;
+using Ticketing.Application.Common.Security;
+using Ticketing.Application.Events;
 using Ticketing.Domain.Events;
 using Ticketing.Domain.Reservations;
 
@@ -30,7 +33,8 @@ internal sealed class ReserveTicketsCommandValidator : AbstractValidator<Reserve
 internal sealed class ReserveTicketsCommandHandler(
     IApplicationDbContext db,
     TimeProvider clock,
-    IOptions<ReservationOptions> options
+    IOptions<ReservationOptions> options,
+    ICurrentUser user
 ) : ICommandHandler<ReserveTicketsCommand, Guid>
 {
     // The event row's concurrency token makes the seat check-and-increment atomic: if two
@@ -46,6 +50,7 @@ internal sealed class ReserveTicketsCommandHandler(
                 var @event =
                     await db.Events.FindAsync([command.EventId], ct)
                     ?? throw new NotFoundException(nameof(Event), command.EventId);
+                EventAccess.EnsureVisible(@event, user);
 
                 var now = clock.GetUtcNow();
                 if (@event.SeatsAvailable < command.Quantity)
@@ -54,6 +59,7 @@ internal sealed class ReserveTicketsCommandHandler(
                 }
 
                 var reservation = @event.Reserve(
+                    user.RequireId(),
                     command.CustomerEmail,
                     command.Quantity,
                     now,

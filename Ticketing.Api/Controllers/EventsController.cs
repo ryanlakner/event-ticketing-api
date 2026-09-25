@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Ticketing.Api.Contracts;
 using Ticketing.Application.Abstractions.Messaging;
 using Ticketing.Application.Common.Models;
+using Ticketing.Application.Common.Security;
 using Ticketing.Application.Events;
 using Ticketing.Application.Events.Commands;
 using Ticketing.Application.Events.Queries;
@@ -17,13 +19,14 @@ namespace Ticketing.Api.Controllers;
 [Produces("application/json")]
 public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
 {
-    /// <summary>Lists events ordered by start time.</summary>
+    /// <summary>Lists events ordered by start time. Drafts appear only to their organizer.</summary>
     /// <param name="cancellationToken">Request cancellation token.</param>
     /// <param name="page">1-based page number.</param>
     /// <param name="pageSize">Items per page (1-100).</param>
     /// <param name="search">Matches against name and venue.</param>
     /// <param name="status">Only return events with this status.</param>
     [HttpGet]
+    [AllowAnonymous]
     [ProducesResponseType<PagedResult<EventDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PagedResult<EventDto>>> List(
@@ -40,6 +43,7 @@ public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
 
     /// <summary>Gets an event, including live seat availability.</summary>
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     [ProducesResponseType<EventDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<EventDto>> GetById(
@@ -47,8 +51,9 @@ public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
         CancellationToken cancellationToken
     ) => await dispatcher.QueryAsync(new GetEventByIdQuery(id), cancellationToken);
 
-    /// <summary>Creates a draft event.</summary>
+    /// <summary>Creates a draft event owned by the caller.</summary>
     [HttpPost]
+    [Authorize(Roles = Roles.Organizer)]
     [Consumes("application/json")]
     [ProducesResponseType<EventDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -72,8 +77,12 @@ public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, created);
     }
 
-    /// <summary>Updates an event's details. Capacity cannot drop below seats already reserved.</summary>
+    /// <summary>
+    /// Updates an event's details. Only its organizer can; capacity cannot drop below seats
+    /// already reserved.
+    /// </summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = Roles.Organizer)]
     [Consumes("application/json")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -101,6 +110,7 @@ public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
 
     /// <summary>Publishes a draft event so tickets can be reserved.</summary>
     [HttpPost("{id:guid}/publish")]
+    [Authorize(Roles = Roles.Organizer)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -112,6 +122,7 @@ public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
 
     /// <summary>Cancels an event and all of its active reservations.</summary>
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Roles = Roles.Organizer)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -121,8 +132,9 @@ public sealed class EventsController(IDispatcher dispatcher) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Holds seats for a customer. The hold expires unless confirmed in time.</summary>
+    /// <summary>Holds seats for the caller. The hold expires unless confirmed in time.</summary>
     [HttpPost("{id:guid}/reservations")]
+    [Authorize(Roles = Roles.Customer)]
     [Consumes("application/json")]
     [ProducesResponseType<ReservationDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

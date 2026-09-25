@@ -9,6 +9,7 @@ Organizers create and publish events. Customers reserve seats, which are held fo
 | Concern        | Choice                                                                     |
 | -------------- | -------------------------------------------------------------------------- |
 | API            | ASP.NET Core controllers, RFC 9457 ProblemDetails, health checks           |
+| Security       | Entra ID access tokens (JWT bearer), Organizer/Customer app roles, ownership checks |
 | CQRS           | Lightweight in-house dispatcher (no MediatR licensing) + FluentValidation  |
 | Consistency    | Optimistic concurrency tokens, automatic retry, database check constraints |
 | Persistence    | EF Core 10 on Azure SQL with Entra ID (Managed Identity) auth, no passwords |
@@ -45,25 +46,65 @@ Controller ──► IDispatcher.SendAsync(command) ──► validators ──�
 
 - Commands change state through domain methods. Queries never load entities; they project straight to DTOs. `GetReservationById`, for example, joins in event details as its own read model.
 - The dispatcher runs every `IValidator<T>` before the handler. Handlers and validators are found by assembly scanning, so a new feature needs no DI wiring.
-- Errors are mapped to problem details: validation → **400**, not found → **404**, and business-rule or concurrency conflicts → **409**.
+- Errors are mapped to problem details: validation → **400**, not signed in → **401**, not allowed → **403**, not found → **404**, and business-rule or concurrency conflicts → **409**.
 
 Each use case is a single file with its request, validator, and handler (for example [`ReserveTickets.cs`](Ticketing.Application/Reservations/Commands/ReserveTickets.cs)).
 
+## Authentication and roles
+
+Callers sign in with **Microsoft Entra ID**. The API validates each request's access token with ASP.NET Core's JWT bearer handler and reads two app roles from its `roles` claim:
+
+| Role | Can |
+| ---- | --- |
+| *(anyone, signed in or not)* | Browse published and cancelled events |
+| `Organizer` | Create events, and update, publish, or cancel **their own** events; see and cancel reservations for their events |
+| `Customer` | Reserve seats, and see, confirm, or cancel **their own** reservations |
+
+Authorization happens in two layers:
+
+- **Roles at the edge.** Every endpoint requires a signed-in user by default (a fallback policy). Only public reads are marked `[AllowAnonymous]`, and each write carries `[Authorize(Roles = ...)]`. A missing or invalid token gets **401**, and the wrong role gets **403**.
+- **Ownership in the application layer.** Events record their `OrganizerId`, and reservations their `CustomerId`. Both come from the token's `oid` claim (Entra ID's stable user ID). Handlers enforce ownership through an `ICurrentUser` abstraction, with the rules in one place ([`EventAccess`](Ticketing.Application/Events/EventAccess.cs)):
+  - Changing another organizer's published event → **403**.
+  - **Drafts are invisible** to everyone except their organizer → **404**.
+  - Someone else's reservation → **404**, so its existence isn't revealed.
+
+Token validation **fails closed**. Issuer and audience checks are always on, so an environment with missing settings rejects every token rather than accepting any. Each environment has its own app registration, so a dev token is never valid in prod.
+
+### Trying it locally, no Entra tenant needed
+
+`dotnet user-jwts` issues development tokens that the same JWT bearer setup accepts:
+
+```bash
+dotnet user-jwts create --project Ticketing.Api --name organizer@example.com --role Organizer --output token
+dotnet user-jwts create --project Ticketing.Api --name customer@example.com --role Customer --output token
+```
+
+Paste a token into Swagger UI's **Authorize** button, or into [`Ticketing.Api.http`](Ticketing.Api/Ticketing.Api.http). The signing key lives in your user secrets, and `appsettings.Development.json` holds only the local issuer and audiences.
+
+### Real Entra ID tokens
+
+`infra/bootstrap` creates an app registration for each environment, with the `Organizer` and `Customer` app roles and an `access_as_user` scope. Whoever runs the bootstrap is granted both roles in `dev` and `qa`. Assign roles to other people under **Entra ID → Enterprise applications → ticketing-api-&lt;env&gt; → Users and groups**. The Azure CLI is pre-authorized, so getting a token is one command:
+
+```bash
+az login --allow-no-subscriptions
+az account get-access-token --scope "api://<API_CLIENT_ID>/access_as_user" --query accessToken -o tsv
+```
+
 ## Endpoints
 
-| Method | Route                              | Description                                     |
-| ------ | ---------------------------------- | ----------------------------------------------- |
-| GET    | `/api/events`                      | Paged list (`page`, `pageSize`, `search`, `status`) |
-| GET    | `/api/events/{id}`                 | Event with live seat availability               |
-| POST   | `/api/events`                      | Create a draft event → 201                      |
-| PUT    | `/api/events/{id}`                 | Update details → 204                            |
-| POST   | `/api/events/{id}/publish`         | Open for reservations → 204                     |
-| POST   | `/api/events/{id}/cancel`          | Cancel the event and its reservations → 204     |
-| POST   | `/api/events/{id}/reservations`    | Hold seats → 201 + `Location`                   |
-| GET    | `/api/reservations/{id}`           | Reservation with event details                  |
-| POST   | `/api/reservations/{id}/confirm`   | Confirm before the hold expires → 204           |
-| POST   | `/api/reservations/{id}/cancel`    | Cancel and release seats → 204                  |
-| GET    | `/health`                          | Liveness + database check                       |
+| Method | Route                              | Who                     | Description                                     |
+| ------ | ---------------------------------- | ----------------------- | ----------------------------------------------- |
+| GET    | `/api/events`                      | Anyone                  | Paged list (`page`, `pageSize`, `search`, `status`) |
+| GET    | `/api/events/{id}`                 | Anyone                  | Event with live seat availability               |
+| POST   | `/api/events`                      | Organizer               | Create a draft event → 201                      |
+| PUT    | `/api/events/{id}`                 | Organizer (owner)       | Update details → 204                            |
+| POST   | `/api/events/{id}/publish`         | Organizer (owner)       | Open for reservations → 204                     |
+| POST   | `/api/events/{id}/cancel`          | Organizer (owner)       | Cancel the event and its reservations → 204     |
+| POST   | `/api/events/{id}/reservations`    | Customer                | Hold seats → 201 + `Location`                   |
+| GET    | `/api/reservations/{id}`           | Its customer or organizer | Reservation with event details                |
+| POST   | `/api/reservations/{id}/confirm`   | Its customer            | Confirm before the hold expires → 204           |
+| POST   | `/api/reservations/{id}/cancel`    | Its customer or organizer | Cancel and release seats → 204                |
+| GET    | `/health`                          | Anyone                  | Liveness + database check                       |
 
 ## Project layout
 
@@ -191,7 +232,7 @@ build ──► infrastructure ──► deploy
 
 ### One-time setup
 
-Run this as a subscription Owner, with `az login` and `gh auth login` done:
+Run this as a subscription Owner who can also create Entra ID app registrations (for example, Application Administrator). Do `az login` and `gh auth login` first:
 
 ```bash
 cd infra/bootstrap
@@ -206,6 +247,7 @@ The bootstrap creates:
 - a resource group and deploy identity for each environment
 - the OIDC federated credentials and role assignments
 - the resource provider registrations the deploy identity can't do itself
+- an Entra ID app registration for each environment, with the `Organizer` and `Customer` app roles
 
 `configure-github.sh` then creates the GitHub environments and sets their variables. None of them are secrets. For **stg** and **prod**, add required reviewers under *Settings → Environments* so those deploys wait for approval.
 
@@ -222,7 +264,8 @@ cd infra
 cp backend.hcl.example backend.hcl          # fill in from `terraform -chdir=bootstrap output`
 terraform init -backend-config=backend.hcl
 terraform apply -var-file=environments/dev.tfvars -var="subscription_id=<SUBSCRIPTION_ID>" \
-  -var="sql_entra_admin_login=<name>" -var="sql_entra_admin_object_id=<object id>"
+  -var="sql_entra_admin_login=<name>" -var="sql_entra_admin_object_id=<object id>" \
+  -var="api_client_id=<environments.dev.api_client_id from bootstrap>"
 ```
 
 Then add your IP to `sql_allowed_ip_addresses` and run the migrations. The bundle reads its connection string from configuration, so pass it as an environment variable:
@@ -253,10 +296,12 @@ az webapp deploy -g "$(terraform -chdir=infra output -raw resource_group_name)" 
 | `Database:ApplyMigrationsOnStartup`      | `false`    | `true` in Development                           |
 | `Swagger:Enabled`                        | `false`    | Always on in Development                        |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING`  | —          | Turns on Azure Monitor OpenTelemetry export     |
+| `Authentication:Schemes:Bearer:*`        | —          | Token authority, issuer, and audiences; set by Terraform in Azure, by `dotnet user-jwts` locally |
 
 ## Roadmap
 
-- Entra ID authentication with organizer and customer roles
+- "My events" and "my reservations" list endpoints
+- Swagger UI sign-in with Entra ID (authorization code + PKCE)
 - Idempotency keys on `POST /reservations` so client retries never double-book
 - Azure Service Bus for confirmation emails (outbox pattern)
 - Terraform plan preview on pull requests

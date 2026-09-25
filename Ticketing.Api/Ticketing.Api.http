@@ -1,8 +1,15 @@
 @host = http://localhost:5084
 
-### Create a draft event
+# Local tokens (see README → Authentication). Create them once with:
+#   dotnet user-jwts create --project Ticketing.Api --name organizer@example.com --role Organizer --output token
+#   dotnet user-jwts create --project Ticketing.Api --name customer@example.com --role Customer --output token
+@organizerToken = <paste organizer token>
+@customerToken = <paste customer token>
+
+### Create a draft event (Organizer)
 # @name createEvent
 POST {{host}}/api/events
+Authorization: Bearer {{organizerToken}}
 Content-Type: application/json
 
 {
@@ -13,12 +20,14 @@ Content-Type: application/json
   "capacity": 150
 }
 
-### Publish it
+### Publish it (Organizer, owner only)
 POST {{host}}/api/events/{{createEvent.response.body.$.id}}/publish
+Authorization: Bearer {{organizerToken}}
 
-### Reserve two seats (held for 10 minutes)
+### Reserve two seats, held for 10 minutes (Customer)
 # @name reserve
 POST {{host}}/api/events/{{createEvent.response.body.$.id}}/reservations
+Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {
@@ -26,23 +35,27 @@ Content-Type: application/json
   "quantity": 2
 }
 
-### Confirm the reservation
+### Confirm the reservation (Customer who made it)
 POST {{host}}/api/reservations/{{reserve.response.body.$.id}}/confirm
+Authorization: Bearer {{customerToken}}
 
-### Check the reservation
+### Check the reservation (its customer or the event's organizer)
 GET {{host}}/api/reservations/{{reserve.response.body.$.id}}
+Authorization: Bearer {{customerToken}}
 
-### Seats available should now be 148
+### Seats available should now be 148 (public)
 GET {{host}}/api/events/{{createEvent.response.body.$.id}}
 
-### Upcoming published events
+### Upcoming published events (public)
 GET {{host}}/api/events?status=Published&page=1&pageSize=20
 
-### Cancel the reservation (releases seats)
+### Cancel the reservation, releasing its seats (customer or organizer)
 POST {{host}}/api/reservations/{{reserve.response.body.$.id}}/cancel
+Authorization: Bearer {{customerToken}}
 
-### Cancel the event
+### Cancel the event (Organizer, owner only)
 POST {{host}}/api/events/{{createEvent.response.body.$.id}}/cancel
+Authorization: Bearer {{organizerToken}}
 
-### Health
+### Health (public)
 GET {{host}}/health

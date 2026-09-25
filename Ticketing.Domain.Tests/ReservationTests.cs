@@ -6,14 +6,17 @@ namespace Ticketing.Domain.Tests;
 
 public sealed class ReservationTests
 {
+    private const string Organizer = "organizer-1";
+    private const string Customer = "customer-1";
+
     private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan Hold = TimeSpan.FromMinutes(10);
 
     private static Reservation PendingReservation()
     {
-        var @event = Event.Create("Show", "", "Hall", Now.AddDays(1), 10, Now);
+        var @event = Event.Create(Organizer, "Show", "", "Hall", Now.AddDays(1), 10, Now);
         @event.Publish(Now);
-        return @event.Reserve("a@b.com", 2, Now, Hold);
+        return @event.Reserve(Customer, "a@b.com", 2, Now, Hold);
     }
 
     [Fact]

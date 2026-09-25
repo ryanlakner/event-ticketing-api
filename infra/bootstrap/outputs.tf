@@ -26,6 +26,7 @@ output "environments" {
       principal_id   = azurerm_user_assigned_identity.deploy[env].principal_id
       identity_name  = azurerm_user_assigned_identity.deploy[env].name
       resource_group = azurerm_resource_group.environment[env].name
+      api_client_id  = azuread_application.api[env].client_id
     }
   }
 }
