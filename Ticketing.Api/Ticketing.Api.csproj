@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <UserSecretsId>ticketing-api</UserSecretsId>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Ticketing.Application\Ticketing.Application.csproj" />
+        <ProjectReference Include="..\Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Swashbuckle.AspNetCore" />
+        <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <!-- Installs local tools and Husky.Net git hooks on restore. Set HUSKY=0 to skip (e.g. in CI). -->
+    <Target
+        Name="Husky"
+        BeforeTargets="Restore;CollectPackageReferences"
+        Condition="'$(HUSKY)' != 0"
+    >
+        <Exec
+            Command="dotnet tool restore"
+            StandardOutputImportance="Low"
+            StandardErrorImportance="High"
+        />
+        <Exec
+            Command="dotnet husky install"
+            StandardOutputImportance="Low"
+            StandardErrorImportance="High"
+            WorkingDirectory="../"
+        />
+    </Target>
+</Project>

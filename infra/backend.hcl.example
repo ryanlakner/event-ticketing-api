@@ -1,0 +1,6 @@
+# Copy to backend.hcl (git-ignored) and point at a pre-created storage account.
+resource_group_name  = "rg-tfstate"
+storage_account_name = "sttfstateticketing"
+container_name       = "tfstate"
+key                  = "ticketing-dev.tfstate"
+use_azuread_auth     = true

@@ -1,0 +1,48 @@
+@host = http://localhost:5084
+
+### Create a draft event
+# @name createEvent
+POST {{host}}/api/events
+Content-Type: application/json
+
+{
+  "name": "Rust Belt Jazz Night",
+  "description": "An evening of live jazz.",
+  "venue": "The Grand Hall",
+  "startsAt": "2027-06-01T19:30:00-04:00",
+  "capacity": 150
+}
+
+### Publish it
+POST {{host}}/api/events/{{createEvent.response.body.$.id}}/publish
+
+### Reserve two seats (held for 10 minutes)
+# @name reserve
+POST {{host}}/api/events/{{createEvent.response.body.$.id}}/reservations
+Content-Type: application/json
+
+{
+  "customerEmail": "fan@example.com",
+  "quantity": 2
+}
+
+### Confirm the reservation
+POST {{host}}/api/reservations/{{reserve.response.body.$.id}}/confirm
+
+### Check the reservation
+GET {{host}}/api/reservations/{{reserve.response.body.$.id}}
+
+### Seats available should now be 148
+GET {{host}}/api/events/{{createEvent.response.body.$.id}}
+
+### Upcoming published events
+GET {{host}}/api/events?status=Published&page=1&pageSize=20
+
+### Cancel the reservation (releases seats)
+POST {{host}}/api/reservations/{{reserve.response.body.$.id}}/cancel
+
+### Cancel the event
+POST {{host}}/api/events/{{createEvent.response.body.$.id}}/cancel
+
+### Health
+GET {{host}}/health
