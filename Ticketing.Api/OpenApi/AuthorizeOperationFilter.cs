@@ -6,11 +6,13 @@ namespace Ticketing.Api.OpenApi;
 
 /// <summary>
 /// Marks operations that need a token (everything not [AllowAnonymous]) so Swagger UI sends it,
-/// and documents the roles each one requires.
+/// and documents the roles each one requires. Either scheme satisfies the requirement: a pasted
+/// bearer token, or Entra ID sign-in when it is configured.
 /// </summary>
-internal sealed class AuthorizeOperationFilter : IOperationFilter
+internal sealed class AuthorizeOperationFilter(SwaggerSignInOptions signIn) : IOperationFilter
 {
     public const string SchemeName = "Bearer";
+    public const string SignInSchemeName = "EntraId";
 
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {
@@ -20,6 +22,7 @@ internal sealed class AuthorizeOperationFilter : IOperationFilter
             return;
         }
 
+        // Separate requirement objects are alternatives (OR) in OpenAPI.
         operation.Security ??= [];
         operation.Security.Add(
             new OpenApiSecurityRequirement
@@ -27,6 +30,18 @@ internal sealed class AuthorizeOperationFilter : IOperationFilter
                 [new OpenApiSecuritySchemeReference(SchemeName, context.Document)] = [],
             }
         );
+        if (signIn.IsConfigured)
+        {
+            operation.Security.Add(
+                new OpenApiSecurityRequirement
+                {
+                    [new OpenApiSecuritySchemeReference(SignInSchemeName, context.Document)] =
+                    [
+                        signIn.Scope!,
+                    ],
+                }
+            );
+        }
 
         var roles = metadata
             .OfType<IAuthorizeData>()

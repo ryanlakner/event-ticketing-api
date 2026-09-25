@@ -22,11 +22,12 @@ output "environments" {
   description = "Per-environment values the deploy workflow reads as GitHub environment variables."
   value = {
     for env in var.environments : env => {
-      client_id      = azurerm_user_assigned_identity.deploy[env].client_id
-      principal_id   = azurerm_user_assigned_identity.deploy[env].principal_id
-      identity_name  = azurerm_user_assigned_identity.deploy[env].name
-      resource_group = azurerm_resource_group.environment[env].name
-      api_client_id  = azuread_application.api[env].client_id
+      client_id         = azurerm_user_assigned_identity.deploy[env].client_id
+      principal_id      = azurerm_user_assigned_identity.deploy[env].principal_id
+      identity_name     = azurerm_user_assigned_identity.deploy[env].name
+      resource_group    = azurerm_resource_group.environment[env].name
+      api_client_id     = azuread_application.api[env].client_id
+      swagger_client_id = azuread_application.swagger[env].client_id
     }
   }
 }

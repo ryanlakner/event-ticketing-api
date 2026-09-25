@@ -18,6 +18,7 @@ resource "azurerm_user_assigned_identity" "api" {
 }
 
 resource "azurerm_linux_web_app" "api" {
+  # bootstrap/identity.tf derives Swagger UI's sign-in redirect URI from this name.
   name                = "app-${local.name}-api"
   resource_group_name = data.azurerm_resource_group.main.name
   location            = data.azurerm_resource_group.main.location
@@ -44,7 +45,7 @@ resource "azurerm_linux_web_app" "api" {
     }
   }
 
-  app_settings = {
+  app_settings = merge({
     ASPNETCORE_ENVIRONMENT                = local.aspnetcore_environment
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.main.connection_string
     AZURE_CLIENT_ID                       = azurerm_user_assigned_identity.api.client_id
@@ -57,7 +58,7 @@ resource "azurerm_linux_web_app" "api" {
     Authentication__Schemes__Bearer__ValidIssuer       = local.entra_authority
     Authentication__Schemes__Bearer__ValidAudiences__0 = var.api_client_id
     Authentication__Schemes__Bearer__ValidAudiences__1 = "api://${var.api_client_id}"
-  }
+  }, local.swagger_sign_in_settings)
 
   # Surfaces to the app as ConnectionStrings:Database.
   connection_string {

@@ -103,3 +103,59 @@ resource "azuread_app_role_assignment" "operator" {
   principal_object_id = data.azuread_client_config.current.object_id
   resource_object_id  = azuread_service_principal.api[each.value.environment].object_id
 }
+
+# --- Swagger UI sign-in ---------------------------------------------------------------
+#
+# A separate public (SPA) client per environment: Swagger UI signs users in with the
+# authorization code flow + PKCE, so no client secret exists. It is pre-authorized for the
+# API's scope, so users aren't asked to consent.
+
+locals {
+  swagger_redirect_uris = {
+    for env in var.environments : env => concat(
+      # Must match the web app name in infra/app_service.tf ("app-<project>-<env>-api").
+      ["https://app-${var.project}-${env}-api.azurewebsites.net/swagger/oauth2-redirect.html"],
+      # Local development on the ports in Ticketing.Api/Properties/launchSettings.json.
+      env == "dev" ? [
+        "http://localhost:5084/swagger/oauth2-redirect.html",
+        "https://localhost:7109/swagger/oauth2-redirect.html",
+      ] : []
+    )
+  }
+}
+
+resource "azuread_application" "swagger" {
+  for_each = var.environments
+
+  display_name     = "${var.project}-swagger-${each.key}"
+  sign_in_audience = "AzureADMyOrg"
+  owners           = [data.azuread_client_config.current.object_id]
+
+  single_page_application {
+    redirect_uris = local.swagger_redirect_uris[each.key]
+  }
+
+  required_resource_access {
+    resource_app_id = azuread_application.api[each.key].client_id
+
+    resource_access {
+      id   = local.access_scope_id
+      type = "Scope"
+    }
+  }
+}
+
+resource "azuread_service_principal" "swagger" {
+  for_each = var.environments
+
+  client_id = azuread_application.swagger[each.key].client_id
+  owners    = [data.azuread_client_config.current.object_id]
+}
+
+resource "azuread_application_pre_authorized" "swagger" {
+  for_each = var.environments
+
+  application_id       = azuread_application.api[each.key].id
+  authorized_client_id = azuread_application.swagger[each.key].client_id
+  permission_ids       = [local.access_scope_id]
+}

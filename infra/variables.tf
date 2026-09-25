@@ -52,6 +52,17 @@ variable "api_client_id" {
   }
 }
 
+variable "swagger_client_id" {
+  description = "Client ID of the Swagger UI app registration (created by bootstrap/). Empty disables Entra ID sign-in in Swagger UI."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.swagger_client_id == "" || can(regex("^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$", var.swagger_client_id))
+    error_message = "swagger_client_id must be empty or a GUID."
+  }
+}
+
 variable "sql_entra_admin_login" {
   description = "Name of the Entra ID principal that administers Azure SQL. The deploy workflow passes its own identity so it can run migrations."
   type        = string

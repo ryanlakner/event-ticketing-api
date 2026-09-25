@@ -13,6 +13,15 @@ locals {
   # on startup. Each environment gets its own name so appsettings.{Name}.json can target it.
   # Entra ID v2 endpoint for this tenant: tokens are issued by, and signing keys published at, it.
   entra_authority = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/v2.0"
+  entra_oauth     = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/oauth2/v2.0"
+
+  # Swagger UI's "Authorize" button signs in with Entra ID, wherever Swagger is exposed.
+  swagger_sign_in_settings = var.enable_swagger && var.swagger_client_id != "" ? {
+    Swagger__SignIn__ClientId         = var.swagger_client_id
+    Swagger__SignIn__AuthorizationUrl = "${local.entra_oauth}/authorize"
+    Swagger__SignIn__TokenUrl         = "${local.entra_oauth}/token"
+    Swagger__SignIn__Scope            = "api://${var.api_client_id}/access_as_user"
+  } : {}
 
   aspnetcore_environment = {
     dev  = "Dev"

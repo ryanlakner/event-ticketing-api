@@ -24,6 +24,7 @@ for env in $(terraform output -json environments | jq -r 'keys[]'); do
   set_var DEPLOY_IDENTITY_NAME "$(jq -r .identity_name <<<"$values")"
   set_var DEPLOY_IDENTITY_PRINCIPAL_ID "$(jq -r .principal_id <<<"$values")"
   set_var API_CLIENT_ID "$(jq -r .api_client_id <<<"$values")"
+  set_var SWAGGER_CLIENT_ID "$(jq -r .swagger_client_id <<<"$values")"
   set_var TF_STATE_RESOURCE_GROUP "$state_rg"
   set_var TF_STATE_STORAGE_ACCOUNT "$state_account"
 done

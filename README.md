@@ -91,6 +91,12 @@ az login --allow-no-subscriptions
 az account get-access-token --scope "api://<API_CLIENT_ID>/access_as_user" --query accessToken -o tsv
 ```
 
+### Signing in from Swagger UI
+
+In environments that expose Swagger (`dev` and `qa`), the **Authorize** button offers **Sign in with Entra ID** alongside pasting a token. Swagger UI runs the **authorization code flow with PKCE** as a public single-page-app client, so no client secret exists anywhere.
+
+The bootstrap creates a separate Swagger UI app registration for each environment. It's pre-authorized for the API's `access_as_user` scope, so users see no consent prompt. Its redirect URI is the environment's `https://app-ticketing-<env>-api.azurewebsites.net/swagger/oauth2-redirect.html`, and in `dev` it also allows `localhost`. The API advertises the sign-in option only when an environment sets `Swagger:SignIn:*`. Otherwise, as with local `dotnet user-jwts` tokens, only the paste-a-token option appears.
+
 ## Endpoints
 
 | Method | Route                              | Who                     | Description                                     |
@@ -250,7 +256,7 @@ The bootstrap creates:
 - a resource group and deploy identity for each environment
 - the OIDC federated credentials and role assignments
 - the resource provider registrations the deploy identity can't do itself
-- an Entra ID app registration for each environment, with the `Organizer` and `Customer` app roles
+- an Entra ID app registration for each environment, with the `Organizer` and `Customer` app roles, plus a Swagger UI sign-in client
 
 `configure-github.sh` then creates the GitHub environments and sets their variables. None of them are secrets. For **stg** and **prod**, add required reviewers under *Settings → Environments* so those deploys wait for approval.
 
@@ -300,10 +306,10 @@ az webapp deploy -g "$(terraform -chdir=infra output -raw resource_group_name)" 
 | `Swagger:Enabled`                        | `false`    | Always on in Development                        |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING`  | —          | Turns on Azure Monitor OpenTelemetry export     |
 | `Authentication:Schemes:Bearer:*`        | —          | Token authority, issuer, and audiences; set by Terraform in Azure, by `dotnet user-jwts` locally |
+| `Swagger:SignIn:*`                       | —          | Swagger UI's Entra ID sign-in: client ID, authorize and token URLs, and scope; set by Terraform where Swagger is on |
 
 ## Roadmap
 
-- Swagger UI sign-in with Entra ID (authorization code + PKCE)
 - Idempotency keys on `POST /reservations` so client retries never double-book
 - Azure Service Bus for confirmation emails (outbox pattern)
 - Terraform plan preview on pull requests

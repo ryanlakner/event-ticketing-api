@@ -50,6 +50,10 @@ builder
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
+var swaggerSignIn =
+    builder.Configuration.GetSection(SwaggerSignInOptions.SectionName).Get<SwaggerSignInOptions>()
+    ?? new SwaggerSignInOptions();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -72,7 +76,30 @@ builder.Services.AddSwaggerGen(options =>
             Description = "An Entra ID access token, or one from `dotnet user-jwts` locally.",
         }
     );
-    options.OperationFilter<AuthorizeOperationFilter>();
+    if (swaggerSignIn.IsConfigured)
+    {
+        options.AddSecurityDefinition(
+            AuthorizeOperationFilter.SignInSchemeName,
+            new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.OAuth2,
+                Description = "Sign in with Microsoft Entra ID (authorization code + PKCE).",
+                Flows = new OpenApiOAuthFlows
+                {
+                    AuthorizationCode = new OpenApiOAuthFlow
+                    {
+                        AuthorizationUrl = swaggerSignIn.AuthorizationUrl,
+                        TokenUrl = swaggerSignIn.TokenUrl,
+                        Scopes = new Dictionary<string, string>
+                        {
+                            [swaggerSignIn.Scope!] = "Call the ticketing API as you",
+                        },
+                    },
+                },
+            }
+        );
+    }
+    options.OperationFilter<AuthorizeOperationFilter>(swaggerSignIn);
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml"),
         includeControllerXmlComments: true
@@ -93,7 +120,18 @@ app.UseStatusCodePages();
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
-    app.UseSwaggerUI(options => options.DocumentTitle = "Event Ticketing API");
+    app.UseSwaggerUI(options =>
+    {
+        options.DocumentTitle = "Event Ticketing API";
+        if (swaggerSignIn.IsConfigured)
+        {
+            // Public client in the browser: PKCE instead of a client secret.
+            options.OAuthClientId(swaggerSignIn.ClientId);
+            options.OAuthUsePkce();
+            options.OAuthScopes(swaggerSignIn.Scope!);
+            options.OAuthAppName("Event Ticketing API");
+        }
+    });
 }
 
 app.UseAuthentication();

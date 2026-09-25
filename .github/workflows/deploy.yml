@@ -94,6 +94,7 @@ jobs:
       TF_VAR_sql_entra_admin_object_id: ${{ vars.DEPLOY_IDENTITY_PRINCIPAL_ID }}
       # The Entra ID app registration whose tokens this environment accepts.
       TF_VAR_api_client_id: ${{ vars.API_CLIENT_ID }}
+      TF_VAR_swagger_client_id: ${{ vars.SWAGGER_CLIENT_ID }}
     defaults:
       run:
         working-directory: infra

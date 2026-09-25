@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Ticketing.Api.Contracts;
@@ -360,5 +361,56 @@ public sealed class TicketingApiTests(TicketingApiFactory factory)
         json.ShouldContain("/api/events/{id}/reservations");
         json.ShouldContain("\"securitySchemes\"");
         json.ShouldContain("Requires role: **Organizer**");
+
+        // Entra ID sign-in is only offered where an environment configures it.
+        json.ShouldNotContain("EntraId");
+    }
+
+    [Fact]
+    public async Task Swagger_ui_offers_entra_id_sign_in_when_configured()
+    {
+        const string clientId = "aaaaaaaa-0000-0000-0000-000000000001";
+        const string scope = "api://bbbbbbbb-0000-0000-0000-000000000002/access_as_user";
+        const string authority = "https://login.microsoftonline.com/tenant-id/oauth2/v2.0";
+        using var withSignIn = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Swagger:SignIn:ClientId", clientId);
+            builder.UseSetting("Swagger:SignIn:AuthorizationUrl", $"{authority}/authorize");
+            builder.UseSetting("Swagger:SignIn:TokenUrl", $"{authority}/token");
+            builder.UseSetting("Swagger:SignIn:Scope", scope);
+        });
+        var client = withSignIn.CreateClient();
+
+        using var document = JsonDocument.Parse(
+            await client.GetStringAsync("/swagger/v1/swagger.json", Ct)
+        );
+        var flow = document
+            .RootElement.GetProperty("components")
+            .GetProperty("securitySchemes")
+            .GetProperty("EntraId")
+            .GetProperty("flows")
+            .GetProperty("authorizationCode");
+        flow.GetProperty("authorizationUrl").GetString().ShouldBe($"{authority}/authorize");
+        flow.GetProperty("tokenUrl").GetString().ShouldBe($"{authority}/token");
+        flow.GetProperty("scopes").TryGetProperty(scope, out _).ShouldBeTrue();
+
+        // Protected operations accept either a pasted token or the sign-in flow.
+        var requirements = document
+            .RootElement.GetProperty("paths")
+            .GetProperty("/api/events")
+            .GetProperty("post")
+            .GetProperty("security")
+            .EnumerateArray()
+            .SelectMany(r => r.EnumerateObject().Select(p => p.Name));
+        requirements.ShouldBe(["Bearer", "EntraId"], ignoreOrder: true);
+
+        // Swagger UI runs the flow as a public client with PKCE; no secret is involved.
+        var ui = await client.GetStringAsync("/swagger/index.js", Ct);
+        ui.ShouldContain($"\"clientId\":\"{clientId}\"");
+        ui.ShouldContain("\"usePkceWithAuthorizationCodeGrant\":true");
+        ui.ShouldNotContain("clientSecret\":\"");
+        (await client.GetAsync("/swagger/oauth2-redirect.html", Ct)).StatusCode.ShouldBe(
+            HttpStatusCode.OK
+        );
     }
 }
