@@ -156,7 +156,15 @@ dotnet ef migrations add <Name> \
   --output-dir Persistence/Migrations
 ```
 
-CI fails if the model has changes with no matching migration. Every CI run also publishes a **`migrations-sql` artifact**. It's an idempotent T-SQL script covering all migrations, and it's safe to run against a database at any version. You can review schema changes in it as plain SQL, or apply it without EF tooling. To generate it locally:
+CI fails if the model has changes with no matching migration.
+
+### API contract
+
+[`openapi/ticketing-api.v1.json`](openapi/ticketing-api.v1.json) is the committed OpenAPI document. `OpenApiContractTests` fails if it no longer matches what the API serves, so every contract change shows up as a reviewable diff. Clients such as [event-ticketing-web](https://github.com/ryanlakner/event-ticketing-web) generate their types from it. After an intended change, refresh it with:
+
+```bash
+UPDATE_OPENAPI_SNAPSHOT=1 dotnet test --project Ticketing.Api.IntegrationTests
+``` Every CI run also publishes a **`migrations-sql` artifact**. It's an idempotent T-SQL script covering all migrations, and it's safe to run against a database at any version. You can review schema changes in it as plain SQL, or apply it without EF tooling. To generate it locally:
 
 ```bash
 dotnet ef migrations script --idempotent \
@@ -256,9 +264,11 @@ The bootstrap creates:
 - a resource group and deploy identity for each environment
 - the OIDC federated credentials and role assignments
 - the resource provider registrations the deploy identity can't do itself
-- an Entra ID app registration for each environment, with the `Organizer` and `Customer` app roles, plus a Swagger UI sign-in client
+- an Entra ID app registration for each environment, with the `Organizer` and `Customer` app roles, plus sign-in clients for Swagger UI and the web app
 
-`configure-github.sh` then creates the GitHub environments and sets their variables. None of them are secrets. For **stg** and **prod**, add required reviewers under *Settings → Environments* so those deploys wait for approval.
+To let the deployed web app call the API, pass its origin with `-var='web_origins={dev=["https://<web host>"]}'`. That one setting drives both the web app's sign-in redirect and the API's CORS allow-list.
+
+`configure-github.sh` then creates the GitHub environments and sets their variables. It also prints the values the web app needs. None of them are secrets. For **stg** and **prod**, add required reviewers under *Settings → Environments* so those deploys wait for approval.
 
 Until the bootstrap runs, the Deploy workflow is **skipped** on every push rather than failing, so the repo works fine with no Azure subscription.
 
@@ -307,6 +317,7 @@ az webapp deploy -g "$(terraform -chdir=infra output -raw resource_group_name)" 
 | `APPLICATIONINSIGHTS_CONNECTION_STRING`  | —          | Turns on Azure Monitor OpenTelemetry export     |
 | `Authentication:Schemes:Bearer:*`        | —          | Token authority, issuer, and audiences; set by Terraform in Azure, by `dotnet user-jwts` locally |
 | `Swagger:SignIn:*`                       | —          | Swagger UI's Entra ID sign-in: client ID, authorize and token URLs, and scope; set by Terraform where Swagger is on |
+| `Cors:AllowedOrigins`                    | `[]`       | Browser origins allowed to call the API (the web app); set from the bootstrap's `web_origins` |
 
 ## Roadmap
 

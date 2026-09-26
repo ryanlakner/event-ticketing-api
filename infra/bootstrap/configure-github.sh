@@ -25,6 +25,7 @@ for env in $(terraform output -json environments | jq -r 'keys[]'); do
   set_var DEPLOY_IDENTITY_PRINCIPAL_ID "$(jq -r .principal_id <<<"$values")"
   set_var API_CLIENT_ID "$(jq -r .api_client_id <<<"$values")"
   set_var SWAGGER_CLIENT_ID "$(jq -r .swagger_client_id <<<"$values")"
+  set_var CORS_ALLOWED_ORIGINS "$(jq -c .web_origins <<<"$values")"
   set_var TF_STATE_RESOURCE_GROUP "$state_rg"
   set_var TF_STATE_STORAGE_ACCOUNT "$state_account"
 done
@@ -33,3 +34,7 @@ done
 gh variable set DEPLOY_ENABLED --repo "$repo" --body true
 
 echo "Done. Add required reviewers to stg and prod under Settings → Environments."
+echo
+echo "event-ticketing-web settings (VITE_ENTRA_TENANT_ID, VITE_ENTRA_CLIENT_ID, VITE_API_SCOPE):"
+terraform output -json environments | jq -r --arg tenant "$tenant_id" \
+  'to_entries[] | "  \(.key): tenant=\($tenant) client=\(.value.web_client_id) scope=api://\(.value.api_client_id)/access_as_user"'

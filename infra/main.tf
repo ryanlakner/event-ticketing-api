@@ -15,6 +15,10 @@ locals {
   entra_authority = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/v2.0"
   entra_oauth     = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/oauth2/v2.0"
 
+  cors_settings = {
+    for index, origin in var.cors_allowed_origins : "Cors__AllowedOrigins__${index}" => origin
+  }
+
   # Swagger UI's "Authorize" button signs in with Entra ID, wherever Swagger is exposed.
   swagger_sign_in_settings = var.enable_swagger && var.swagger_client_id != "" ? {
     Swagger__SignIn__ClientId         = var.swagger_client_id

@@ -159,3 +159,55 @@ resource "azuread_application_pre_authorized" "swagger" {
   authorized_client_id = azuread_application.swagger[each.key].client_id
   permission_ids       = [local.access_scope_id]
 }
+
+# --- Web app (event-ticketing-web) sign-in ---------------------------------------------
+#
+# A public SPA client per environment for the React front end, signing in with MSAL
+# (authorization code + PKCE). Its origins also become the API's CORS allow-list, so the two
+# can never disagree.
+
+locals {
+  web_redirect_uris = {
+    for env in var.environments : env => concat(
+      lookup(var.web_origins, env, []),
+      # `npm run dev` in event-ticketing-web (Vite's default port).
+      env == "dev" ? ["http://localhost:5173"] : []
+    )
+  }
+}
+
+resource "azuread_application" "web" {
+  for_each = var.environments
+
+  display_name     = "${var.project}-web-${each.key}"
+  sign_in_audience = "AzureADMyOrg"
+  owners           = [data.azuread_client_config.current.object_id]
+
+  single_page_application {
+    redirect_uris = [for uri in local.web_redirect_uris[each.key] : "${uri}/"]
+  }
+
+  required_resource_access {
+    resource_app_id = azuread_application.api[each.key].client_id
+
+    resource_access {
+      id   = local.access_scope_id
+      type = "Scope"
+    }
+  }
+}
+
+resource "azuread_service_principal" "web" {
+  for_each = var.environments
+
+  client_id = azuread_application.web[each.key].client_id
+  owners    = [data.azuread_client_config.current.object_id]
+}
+
+resource "azuread_application_pre_authorized" "web" {
+  for_each = var.environments
+
+  application_id       = azuread_application.api[each.key].id
+  authorized_client_id = azuread_application.web[each.key].client_id
+  permission_ids       = [local.access_scope_id]
+}

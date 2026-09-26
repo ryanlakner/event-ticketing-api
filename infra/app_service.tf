@@ -58,7 +58,7 @@ resource "azurerm_linux_web_app" "api" {
     Authentication__Schemes__Bearer__ValidIssuer       = local.entra_authority
     Authentication__Schemes__Bearer__ValidAudiences__0 = var.api_client_id
     Authentication__Schemes__Bearer__ValidAudiences__1 = "api://${var.api_client_id}"
-  }, local.swagger_sign_in_settings)
+  }, local.swagger_sign_in_settings, local.cors_settings)
 
   # Surfaces to the app as ConnectionStrings:Database.
   connection_string {

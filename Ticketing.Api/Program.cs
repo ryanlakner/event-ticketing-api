@@ -37,6 +37,19 @@ builder
     .Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 builder.Services.AddHttpContextAccessor();
+
+// Browser clients on other origins (the web app). Tokens travel in the Authorization header, not
+// cookies, so credentials stay off; Location is exposed so clients can follow 201 responses.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(policy =>
+        policy
+            .WithOrigins(corsOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .WithExposedHeaders("Location")
+    )
+);
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
 builder
@@ -100,6 +113,10 @@ builder.Services.AddSwaggerGen(options =>
         );
     }
     options.OperationFilter<AuthorizeOperationFilter>(swaggerSignIn);
+
+    // Describe nullability exactly as the C# types declare it, for accurate generated clients.
+    options.SupportNonNullableReferenceTypes();
+    options.SchemaFilter<RequireNonNullablePropertiesSchemaFilter>();
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml"),
         includeControllerXmlComments: true
@@ -134,6 +151,8 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger
     });
 }
 
+// Before authentication, so preflight requests are answered without a token.
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
