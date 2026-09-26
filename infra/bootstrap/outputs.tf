@@ -28,6 +28,8 @@ output "environments" {
       resource_group    = azurerm_resource_group.environment[env].name
       api_client_id     = azuread_application.api[env].client_id
       swagger_client_id = azuread_application.swagger[env].client_id
+      web_client_id     = azuread_application.web[env].client_id
+      web_origins       = lookup(var.web_origins, env, [])
     }
   }
 }

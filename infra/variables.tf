@@ -63,6 +63,12 @@ variable "swagger_client_id" {
   }
 }
 
+variable "cors_allowed_origins" {
+  description = "Browser origins allowed to call the API (the web app). Set by bootstrap/ from web_origins."
+  type        = list(string)
+  default     = []
+}
+
 variable "sql_entra_admin_login" {
   description = "Name of the Entra ID principal that administers Azure SQL. The deploy workflow passes its own identity so it can run migrations."
   type        = string

@@ -21,6 +21,7 @@ Sizes are rough effort: **S** is an evening, **M** is a few sessions, and **L** 
 - [x] EF Core on Azure SQL with Managed Identity; migrations, a pending-changes check, and a SQL script artifact in CI
 - [x] Entra ID authentication with `Organizer`/`Customer` roles and ownership rules; `/api/me` endpoints
 - [x] Swagger UI, with paste-a-token and Entra ID sign-in (PKCE)
+- [x] Web client support: CORS, a web sign-in app registration, and a committed OpenAPI contract for [event-ticketing-web](https://github.com/ryanlakner/event-ticketing-web)
 - [x] Terraform for App Service, SQL, and monitoring; a bootstrap for state, identities, and app registrations
 - [x] GitHub Actions: CI, plus OIDC deploys to `dev`, `qa`, `stg`, and `prod` (skipped until the bootstrap runs)
 - [x] CSharpier, Husky.Net hooks, and enforced Conventional Commits
@@ -75,9 +76,9 @@ Make the safety net match production more closely, and make the architecture enf
 - [ ] **Code coverage in CI** · `ci` · S
   - *Done when:* coverage is collected with Microsoft.Testing.Platform's coverage extension, summarized on each run, and shown as a README badge, with a minimum threshold that fails the build.
 
-- [ ] **OpenAPI snapshot test** · `test` · S
-  - *Why:* catches accidental API contract changes in review.
-  - *Done when:* a test snapshots `swagger.json` with Verify, and any change shows up as a diff in the PR.
+- [x] **OpenAPI snapshot test** · `test` · S
+  - *Why:* catches accidental API contract changes in review, and gives clients a file to generate types from.
+  - *Done:* `OpenApiContractTests` keeps [`openapi/ticketing-api.v1.json`](openapi/ticketing-api.v1.json) identical to the served document. `UPDATE_OPENAPI_SNAPSHOT=1 dotnet test` refreshes it, and changes show up as a diff in the PR.
 
 - [ ] **Mutation testing** · `test` · M
   - *Done when:* Stryker.NET runs against `Ticketing.Domain` and `Ticketing.Application` in a weekly workflow, and the score is recorded in the README.
@@ -211,5 +212,5 @@ Know it's healthy before a customer tells you.
 - [ ] **Generated typed client** · `feat(client)` · S
   - *Done when:* a Kiota- or NSwag-generated C#/TypeScript client is produced from `swagger.json` in CI and published as a build artifact.
 
-- [ ] **Web front end** · `feat(web)` · L
-  - *Done when:* a small React or Blazor app lets customers browse events, reserve with a live hold countdown, and confirm, and lets organizers manage events. It signs in with Entra ID and is hosted on Azure Static Web Apps.
+- [x] **Web front end** · `feat(web)` · L
+  - *Done:* lives in its own repo, [event-ticketing-web](https://github.com/ryanlakner/event-ticketing-web): React, TypeScript, and Vite, with MSAL sign-in and types generated from `openapi/ticketing-api.v1.json`. Deploying it is tracked in that repo's roadmap.

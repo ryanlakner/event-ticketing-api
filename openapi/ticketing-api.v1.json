@@ -1,0 +1,1054 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Event Ticketing API",
+    "description": "Create events, reserve seats, and confirm tickets without overselling.",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/events": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Lists events ordered by start time. Drafts appear only to their organizer.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Items per page (1-100).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Matches against name and venue.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Only return events with this status.",
+            "schema": {
+              "$ref": "#/components/schemas/EventStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDtoPagedResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Creates a draft event owned by the caller.",
+        "description": "Requires role: **Organizer**.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Gets an event, including live seat availability.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Updates an event's details. Only its organizer can; capacity cannot drop below seats\nalready reserved.",
+        "description": "Requires role: **Organizer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/publish": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Publishes a draft event so tickets can be reserved.",
+        "description": "Requires role: **Organizer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Cancels an event and all of its active reservations.",
+        "description": "Requires role: **Organizer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/reservations": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Holds seats for the caller. The hold expires unless confirmed in time.",
+        "description": "Requires role: **Customer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveTicketsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/me/events": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "summary": "Lists events the caller organizes, drafts included, ordered by start time.",
+        "description": "Requires role: **Organizer**.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Items per page (1-100).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Only return events with this status.",
+            "schema": {
+              "$ref": "#/components/schemas/EventStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDtoPagedResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/me/reservations": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "summary": "Lists the caller's reservations, soonest event first.",
+        "description": "Requires role: **Customer**.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Items per page (1-100).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Only return reservations with this status.",
+            "schema": {
+              "$ref": "#/components/schemas/ReservationStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDtoPagedResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/reservations/{id}": {
+      "get": {
+        "tags": [
+          "Reservations"
+        ],
+        "summary": "Gets a reservation. Visible to its customer and the event's organizer.",
+        "description": "Requires role: **Customer** or **Organizer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/reservations/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Reservations"
+        ],
+        "summary": "Confirms the caller's pending reservation before its hold expires.",
+        "description": "Requires role: **Customer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/reservations/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Reservations"
+        ],
+        "summary": "Cancels a reservation and releases its seats. Allowed for its customer and the event's organizer.",
+        "description": "Requires role: **Customer** or **Organizer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, or invalid access token."
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this."
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EventDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "venue": {
+            "type": "string",
+            "nullable": true
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "capacity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "seatsAvailable": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EventStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventDtoPagedResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventDto"
+            },
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name.",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional details shown to buyers.",
+            "nullable": true
+          },
+          "venue": {
+            "type": "string",
+            "description": "Where the event takes place.",
+            "nullable": true
+          },
+          "startsAt": {
+            "type": "string",
+            "description": "Start time; must be in the future. Stored in UTC.",
+            "format": "date-time"
+          },
+          "capacity": {
+            "type": "integer",
+            "description": "Total seats available (1-100,000).",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Payload for creating or updating an event."
+      },
+      "EventStatus": {
+        "enum": [
+          "Draft",
+          "Published",
+          "Cancelled"
+        ],
+        "type": "string"
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": {}
+      },
+      "ReservationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventName": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventStartsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "customerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "customerEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReservationStatus"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReservationDtoPagedResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReservationDto"
+            },
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReservationStatus": {
+        "enum": [
+          "Pending",
+          "Confirmed",
+          "Cancelled",
+          "Expired"
+        ],
+        "type": "string"
+      },
+      "ReserveTicketsRequest": {
+        "type": "object",
+        "properties": {
+          "customerEmail": {
+            "type": "string",
+            "description": "Who the tickets are for.",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Number of seats (1-10).",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Payload for holding seats at an event."
+      },
+      "ValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": {}
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "An Entra ID access token, or one from `dotnet user-jwts` locally.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Events"
+    },
+    {
+      "name": "Me",
+      "description": "The signed-in caller's own resources. The user always comes from the access token, never\nfrom the URL, so there is no ID to tamper with."
+    },
+    {
+      "name": "Reservations"
+    }
+  ]
+}

@@ -37,3 +37,14 @@ variable "operator_role_environments" {
   type        = set(string)
   default     = ["dev", "qa"]
 }
+
+variable "web_origins" {
+  description = "Deployed origins of the web app per environment, e.g. { dev = [\"https://tickets-dev.example.com\"] }. Used for sign-in redirects and the API's CORS allow-list."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition     = alltrue([for origins in values(var.web_origins) : alltrue([for o in origins : can(regex("^https://[^/]+$", o))])])
+    error_message = "web_origins must be https origins with no path or trailing slash."
+  }
+}
