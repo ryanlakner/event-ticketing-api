@@ -744,6 +744,17 @@
   "components": {
     "schemas": {
       "EventDto": {
+        "required": [
+          "capacity",
+          "createdAt",
+          "description",
+          "id",
+          "name",
+          "seatsAvailable",
+          "startsAt",
+          "status",
+          "venue"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -751,16 +762,13 @@
             "format": "uuid"
           },
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "description": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "venue": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "startsAt": {
             "type": "string",
@@ -790,14 +798,20 @@
         "additionalProperties": false
       },
       "EventDtoPagedResult": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount",
+          "totalPages"
+        ],
         "type": "object",
         "properties": {
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventDto"
-            },
-            "nullable": true
+            }
           },
           "page": {
             "type": "integer",
@@ -820,12 +834,17 @@
         "additionalProperties": false
       },
       "EventRequest": {
+        "required": [
+          "capacity",
+          "name",
+          "startsAt",
+          "venue"
+        ],
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "Display name.",
-            "nullable": true
+            "description": "Display name."
           },
           "description": {
             "type": "string",
@@ -834,8 +853,7 @@
           },
           "venue": {
             "type": "string",
-            "description": "Where the event takes place.",
-            "nullable": true
+            "description": "Where the event takes place."
           },
           "startsAt": {
             "type": "string",
@@ -887,6 +905,18 @@
         "additionalProperties": {}
       },
       "ReservationDto": {
+        "required": [
+          "createdAt",
+          "customerEmail",
+          "customerId",
+          "eventId",
+          "eventName",
+          "eventStartsAt",
+          "expiresAt",
+          "id",
+          "quantity",
+          "status"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -898,20 +928,17 @@
             "format": "uuid"
           },
           "eventName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "eventStartsAt": {
             "type": "string",
             "format": "date-time"
           },
           "customerId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "customerEmail": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "quantity": {
             "type": "integer",
@@ -937,14 +964,20 @@
         "additionalProperties": false
       },
       "ReservationDtoPagedResult": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount",
+          "totalPages"
+        ],
         "type": "object",
         "properties": {
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReservationDto"
-            },
-            "nullable": true
+            }
           },
           "page": {
             "type": "integer",
@@ -976,12 +1009,15 @@
         "type": "string"
       },
       "ReserveTicketsRequest": {
+        "required": [
+          "customerEmail",
+          "quantity"
+        ],
         "type": "object",
         "properties": {
           "customerEmail": {
             "type": "string",
-            "description": "Who the tickets are for.",
-            "nullable": true
+            "description": "Who the tickets are for."
           },
           "quantity": {
             "type": "integer",
@@ -993,6 +1029,9 @@
         "description": "Payload for holding seats at an event."
       },
       "ValidationProblemDetails": {
+        "required": [
+          "errors"
+        ],
         "type": "object",
         "properties": {
           "type": {
@@ -1023,8 +1062,7 @@
               "items": {
                 "type": "string"
               }
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": {}

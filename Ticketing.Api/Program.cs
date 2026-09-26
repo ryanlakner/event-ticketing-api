@@ -113,6 +113,10 @@ builder.Services.AddSwaggerGen(options =>
         );
     }
     options.OperationFilter<AuthorizeOperationFilter>(swaggerSignIn);
+
+    // Describe nullability exactly as the C# types declare it, for accurate generated clients.
+    options.SupportNonNullableReferenceTypes();
+    options.SchemaFilter<RequireNonNullablePropertiesSchemaFilter>();
     options.IncludeXmlComments(
         Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml"),
         includeControllerXmlComments: true
